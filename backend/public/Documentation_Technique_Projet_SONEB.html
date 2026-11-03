@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Documentation Technique et Fonctionnelle — SONEB</title>
+  <style>
+    @page { size: A4; margin: 20mm; }
+    body { font-family: "Segoe UI", Arial, sans-serif; line-height: 1.6; color: #222; margin: 0 auto; max-width: 900px; padding: 30px; background-color: #fff; }
+    .header-banner { text-align: center; border-bottom: 3px solid #005ea2; padding-bottom: 20px; margin-bottom: 30px; }
+    .header-banner h1 { color: #005ea2; font-size: 26px; margin: 0 0 10px 0; text-transform: uppercase; letter-spacing: 1px; }
+    .header-banner h2 { color: #0b2b48; font-size: 18px; margin: 0 0 10px 0; font-weight: 600; }
+    .header-banner p { color: #666; font-size: 14px; margin: 0; font-style: italic; }
+    .btn-print { background: #005ea2; color: #fff; border: none; padding: 10px 20px; font-size: 14px; font-weight: bold; border-radius: 6px; cursor: pointer; margin-bottom: 25px; transition: background 0.2s; }
+    .btn-print:hover { background: #0b2b48; }
+    h2.section-title { color: #005ea2; border-bottom: 2px solid #e2e8f0; padding-bottom: 8px; margin-top: 30px; font-size: 20px; }
+    h3.sub-title { color: #0b2b48; font-size: 16px; margin-top: 20px; }
+    p, li { font-size: 14px; color: #333; }
+    ul { padding-left: 20px; }
+    li { margin-bottom: 8px; }
+    .badge { background: #e0f2fe; color: #0369a1; padding: 2px 8px; border-radius: 4px; font-weight: 600; font-size: 12px; }
+    table { width: 100%; border-collapse: collapse; margin: 15px 0; font-size: 13px; }
+    table th, table td { border: 1px solid #cbd5e1; padding: 10px 12px; text-align: left; }
+    table th { background: #0b2b48; color: #fff; font-weight: 600; }
+    table tr:nth-child(even) { background: #f8fafc; }
+    .box-info { background: #f0fdf4; border-left: 4px solid #16a34a; padding: 12px 16px; margin: 15px 0; border-radius: 0 6px 6px 0; }
+    .box-tech { background: #f0f9ff; border-left: 4px solid #005ea2; padding: 12px 16px; margin: 15px 0; border-radius: 0 6px 6px 0; }
+    footer { text-align: center; margin-top: 50px; font-size: 12px; color: #888; border-top: 1px solid #e2e8f0; padding-top: 15px; }
+    @media print {
+      .btn-print { display: none; }
+      body { padding: 0; }
+    }
+  </style>
+</head>
+<body>
+
+  <div style="text-align: right;">
+    <button class="btn-print" onclick="window.print()">📥 Imprimer / Télécharger en PDF</button>
+  </div>
+
+  <div class="header-banner">
+    <h1>Société Nationale des Eaux du Bénin (SONEB)</h1>
+    <h2>Documentation Technique et Fonctionnelle Complète</h2>
+    <p>Plateforme de Mise à Jour des Coordonnées Abonnés & Sas de Validation (Staging)</p>
+  </div>
+
+  <h2 class="section-title">1. Contexte et Objectifs Métier</h2>
+  <p>La SONEB gère un vaste parc d'abonnés identifiés par une référence contractuelle unique à 14 caractères (ex. <code>14000010060BFA</code>). Cette plateforme a été développée pour permettre aux abonnés d'actualiser en ligne leurs coordonnées de contact :</p>
+  <ul>
+    <li><strong>Numéro CIP (Certificat d'Identification Personnelle) :</strong> 15 chiffres maximum.</li>
+    <li><strong>Numéro de Téléphone :</strong> Format normalisé (chiffres uniquement).</li>
+    <li><strong>Adresse E-mail :</strong> Valide et liée au compte de l'abonné.</li>
+  </ul>
+  <div class="box-info">
+    <strong>Principe directeur de sécurité :</strong> Aucune mise à jour directe n'est autorisée dans la table officielle. Chaque modification passe par un sas d'attente (<strong>Staging</strong>) qui doit être validé par un administrateur SONEB habilité (<code>agbahide73@gmail.com</code>).
+  </div>
+
+  <h2 class="section-title">2. Architecture et Stack Technologique</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>Couche</th>
+        <th>Technologie</th>
+        <th>Rôle &amp; Particularités</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>Backend API</strong></td>
+        <td>PHP 8.2 &amp; Laravel 11</td>
+        <td>Architecture REST, ORM Eloquent, gestion des tokens Sanctum, commande CLI d'importation streaming OpenXML.</td>
+      </tr>
+      <tr>
+        <td><strong>Base de Données</strong></td>
+        <td>MySQL / MariaDB (XAMPP)</td>
+        <td>Tables relationnelles : <code>polices</code> (table officielle), <code>saisies_staging</code> (sas d'attente), <code>users</code> (comptes avec privilèges).</td>
+      </tr>
+      <tr>
+        <td><strong>Frontend Client</strong></td>
+        <td>React 18 + TypeScript + Vite</td>
+        <td>Single Page Application réactive, navigation par onglets sans rechargement, design centré en cartes modernes.</td>
+      </tr>
+      <tr>
+        <td><strong>Design &amp; UI</strong></td>
+        <td>Tailwind CSS</td>
+        <td>Palette officielle SONEB (Bleu <code>#005ea2</code> et <code>#0b2b48</code>), suppression de la navbar pour une interface ultra-épurée, 100% responsive.</td>
+      </tr>
+      <tr>
+        <td><strong>Authentification</strong></td>
+        <td>Google OAuth 2.0 API</td>
+        <td>Vérification d'identité avec <code>login_hint</code> atterrissant directement sur l'écran de mot de passe officiel de Google.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2 class="section-title">3. Fonctionnalités et Parcours Utilisateurs</h2>
+  
+  <h3 class="sub-title">A. Parcours Abonné (Consultation &amp; Mise à jour)</h3>
+  <ul>
+    <li><strong>Étape 1 — Authentification :</strong> L'abonné renseigne son e-mail sur la carte d'accueil. Il est dirigé sur Google pour confirmer son mot de passe.</li>
+    <li><strong>Étape 2 — Recherche :</strong> L'abonné saisit sa référence à 14 caractères. Le système interroge la base SONEB et affiche le récapitulatif officiel (Nom du titulaire, Ville, Agence, Police, etc.).</li>
+    <li><strong>Étape 3 — Saisie des coordonnées :</strong> L'abonné renseigne son CIP, son Téléphone et ajuste si besoin son adresse e-mail. Les informations sont envoyées dans le sas Staging avec succès.</li>
+  </ul>
+
+  <h3 class="sub-title">B. Parcours Administrateur (Sas de Validation)</h3>
+  <p>L'utilisateur connecté avec l'e-mail <strong><code>agbahide73@gmail.com</code></strong> a automatiquement accès à l'onglet d'administration :</p>
+  <ul>
+    <li><strong>Filtrage dynamique :</strong> Consultation des saisies <em>En attente</em>, <em>Validées</em> ou <em>Rejetées</em>.</li>
+    <li><strong>Validation en un clic :</strong> Répercute instantanément les nouvelles coordonnées dans la table officielle <code>polices</code>.</li>
+    <li><strong>Rejet avec motif :</strong> Archive la demande avec le motif saisi.</li>
+    <li><strong>Export CSV :</strong> Génère un export tabulaire prêt à être injecté dans le logiciel central de facturation de la SONEB.</li>
+  </ul>
+
+  <h2 class="section-title">4. Le Moteur d'Importation Haute Performance</h2>
+  <div class="box-tech">
+    <strong>Commande dédiée :</strong> <code>C:\xampp\php\php.exe artisan soneb:import-police "chemin_fichier.xlsx"</code>
+  </div>
+  <ul>
+    <li><strong>Streaming XML (ZipArchive + SimpleXML) :</strong> Lecture directe du flux compressé sans exploser la RAM du serveur (mémoire constante quelle que soit la taille du fichier).</li>
+    <li><strong>Compatibilité double OpenXML :</strong> Prise en charge native des chaînes partagées (<code>sharedStrings</code>) et des chaînes directes (<code>inlineStr</code>).</li>
+    <li><strong>Reconstitution de référence :</strong> Reconstruction automatique de la référence active à 14 caractères (L+B+N+R+K+S ou colonne M Payeur).</li>
+    <li><strong>Upsert par lot de 1 000 :</strong> Met à jour les enregistrements existants et insère les nouveaux sans aucun risque de doublon.</li>
+  </ul>
+
+  <h2 class="section-title">5. Défis Techniques Clés Résolus</h2>
+  <ul>
+    <li><strong>Verrouillage du code unique Google :</strong> En mode développement, React montait le composant deux fois (Strict Mode), provoquant une erreur <code>invalid_grant</code>. Résolu par un verrou <code>useRef</code> et un nettoyage immédiat de l'URL via <code>window.history.replaceState</code>.</li>
+    <li><strong>Correction de la longueur de colonne MySQL :</strong> La colonne <code>nomop</code> a été étendue à 255 caractères (et <code>email</code> à 100) pour accepter les noms complets et adresses longues, avec suppression définitive du préfixe redondant "Abonné".</li>
+    <li><strong>Recentrage et esthétique :</strong> Retrait de la bannière supérieure au profit d'une carte centrale moderne aux couleurs officielles bleu SONEB.</li>
+  </ul>
+
+  <footer>
+    Société Nationale des Eaux du Bénin (SONEB) — Documentation Technique — 01/11/2026
+  </footer>
+
+</body>
+</html>

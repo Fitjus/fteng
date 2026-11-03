@@ -1,0 +1,146 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use Illuminate\Http\Request;
+use App\Models\Police;
+use App\Models\SaisieStaging;
+use Illuminate\Support\Facades\DB;
+
+class AdminController extends Controller
+{
+    /**
+     * Vérifier que l'utilisateur est bien admin
+     */
+    protected function checkAdmin(Request $request)
+    {
+        if (!$request->user() || !$request->user()->is_admin) {
+            abort(403, 'Accès réservé aux administrateurs SONEB.');
+        }
+    }
+
+    /**
+     * Liste des saisies dans le staging avec filtres
+     */
+    public function getStaging(Request $request)
+    {
+        $this->checkAdmin($request);
+
+        $query = SaisieStaging::with(['user', 'admin']);
+
+        // Filtre par statut (en_attente, valide, rejete)
+        if ($request->has('statut') && in_array($request->statut, ['en_attente', 'valide', 'rejete'])) {
+            $query->where('statut', $request->statut);
+        }
+
+        // Filtre par référence
+        if ($request->filled('reference')) {
+            $query->where('reference', 'LIKE', '%' . trim($request->reference) . '%');
+        }
+
+        $saisies = $query->latest()->paginate(15);
+
+        return response()->json($saisies);
+    }
+
+    /**
+     * Valider une saisie en staging : met à jour la table officielle `polices`
+     */
+    public function valider(Request $request, $id)
+    {
+        $this->checkAdmin($request);
+
+        return DB::transaction(function () use ($id, $request) {
+            $staging = SaisieStaging::where('id', $id)
+                ->where('statut', 'en_attente')
+                ->lockForUpdate()
+                ->firstOrFail();
+
+            // 1. Mettre à jour la table officielle SONEB
+            $police = Police::where('reference', $staging->reference)->firstOrFail();
+            $police->update([
+                'cip'       => $staging->cip,
+                'telephone' => $staging->telephone,
+                'email'     => $staging->email,
+                'datesais'  => $staging->datesais,
+                'nomop'     => $staging->nomop,
+            ]);
+
+            // 2. Marquer la saisie comme validée dans le staging
+            $staging->update([
+                'statut'       => 'valide',
+                'admin_id'     => $request->user()->id,
+                'validated_at' => now(),
+            ]);
+
+            return response()->json([
+                'message' => "La saisie pour la référence {$staging->reference} a été validée et intégrée dans la base officielle.",
+                'staging' => $staging,
+            ]);
+        });
+    }
+
+    /**
+     * Rejeter une saisie en staging avec un motif (la table officielle polices reste intacte)
+     */
+    public function rejeter(Request $request, $id)
+    {
+        $this->checkAdmin($request);
+
+        $request->validate([
+            'motif' => 'required|string|max:255',
+        ]);
+
+        $staging = SaisieStaging::where('id', $id)
+            ->where('statut', 'en_attente')
+            ->firstOrFail();
+
+        $staging->update([
+            'statut'       => 'rejete',
+            'admin_id'     => $request->user()->id,
+            'motif_rejet'  => $request->motif,
+            'validated_at' => now(),
+        ]);
+
+        return response()->json([
+            'message' => "La saisie a été rejetée.",
+            'staging' => $staging,
+        ]);
+    }
+
+    /**
+     * Export CSV des données validées pour réinjection dans le système SONEB
+     */
+    public function export(Request $request)
+    {
+        $this->checkAdmin($request);
+
+        $polices = Police::whereNotNull('cip')
+            ->orWhereNotNull('telephone')
+            ->get();
+
+        $csvHeader = "Departement,Agence,Centre,Reference,Police,CIP,Telephone,Email,DateSaisie,NomOperateur\n";
+        $csvBody = '';
+
+        foreach ($polices as $p) {
+            $csvBody .= sprintf(
+                "%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n",
+                $p->departement,
+                $p->agence,
+                $p->centre,
+                $p->reference,
+                $p->police,
+                $p->cip,
+                $p->telephone,
+                $p->email,
+                $p->datesais?->format('Y-m-d'),
+                '"' . str_replace('"', '""', $p->nomop) . '"'
+            );
+        }
+
+        return response($csvHeader . $csvBody, 200, [
+            'Content-Type'        => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="soneb_mises_a_jour_' . date('Ymd_His') . '.csv"',
+        ]);
+    }
+}
