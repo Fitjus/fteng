@@ -30,7 +30,7 @@ class DatabaseSeeder extends Seeder
         $excelPath = database_path('data/polalada.xlsx');
         if (file_exists($excelPath) && \App\Models\Police::count() === 0) {
             \Illuminate\Support\Facades\Artisan::call('soneb:import-police', [
-                'path' => $excelPath,
+                'file' => $excelPath,
             ]);
         }
     }
