@@ -37,9 +37,9 @@ return new class extends Migration
             // Champs consolidés après validation définitive
             $table->string('cip', 15)->nullable();
             $table->string('telephone', 15)->nullable();
-            $table->string('email', 30)->nullable();
+            $table->string('email', 100)->nullable();
             $table->date('datesais')->nullable();
-            $table->string('nomop', 50)->nullable();
+            $table->string('nomop', 255)->nullable();
 
             $table->timestamps();
         });

@@ -20,11 +20,11 @@ return new class extends Migration
             // Données saisies
             $table->string('cip', 15);
             $table->string('telephone', 15);
-            $table->string('email', 30)->nullable();
+            $table->string('email', 100)->nullable();
 
             // Métadonnées de la saisie
             $table->date('datesais');                           // Date du jour automatique
-            $table->string('nomop', 50)->default('Abonné (En ligne)'); // Nom de l'utilisateur connecté ou Abonné
+            $table->string('nomop', 255)->default('Abonné (En ligne)'); // Nom de l'utilisateur connecté ou Abonné
             $table->foreignId('user_id')->nullable()->constrained('users')->nullOnDelete();
 
             // Sas de validation par l'administrateur
