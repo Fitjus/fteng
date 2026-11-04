@@ -13,10 +13,44 @@ class EmailService
      */
     public static function sendEmail(string $to, string $subject, string $htmlContent, ?string $toName = null): array
     {
+        $brevoKey  = env('BREVO_API_KEY', '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');
         $resendKey = env('RESEND_API_KEY', 're_eGMCerg9_8uHYjYiGBPkxwHC3w16nu1Bp');
-        $brevoKey  = env('BREVO_API_KEY');
 
-        // 1. Essai prioritaire via Resend API (HTTPS Port 443 - Jamais bloqué sur Render)
+        // 1. Essai prioritaire via Brevo API (HTTPS Port 443 - Envoie à TOUTES les adresses sans restriction de domaine)
+        if (!empty($brevoKey)) {
+            try {
+                $response = Http::withHeaders([
+                    'api-key'      => trim($brevoKey),
+                    'Content-Type' => 'application/json',
+                    'accept'       => 'application/json',
+                ])->timeout(15)->post('https://api.brevo.com/v3/smtp/email', [
+                    'sender'      => [
+                        'name'  => env('MAIL_FROM_NAME', 'SONEB Bénin'),
+                        'email' => env('MAIL_FROM_ADDRESS', 'sonebupdate@gmail.com'),
+                    ],
+                    'to'          => [
+                        ['email' => $to, 'name' => $toName ?: $to]
+                    ],
+                    'subject'     => $subject,
+                    'htmlContent' => $htmlContent,
+                ]);
+
+                if ($response->successful()) {
+                    Log::info("E-mail envoyé avec succès via Brevo API à {$to}");
+                    return [
+                        'success'  => true,
+                        'provider' => 'Brevo API (HTTPS)',
+                        'details'  => $response->json(),
+                    ];
+                }
+
+                Log::warning("Brevo API warning (" . $response->status() . "): " . $response->body());
+            } catch (\Throwable $e) {
+                Log::warning("Brevo API exception: " . $e->getMessage());
+            }
+        }
+
+        // 2. Essai de secours via Resend API (HTTPS Port 443)
         if (!empty($resendKey)) {
             try {
                 $fromSender = env('RESEND_FROM', 'SONEB <onboarding@resend.dev>');
@@ -45,37 +79,6 @@ class EmailService
             } catch (\Throwable $e) {
                 Log::warning("Resend API exception: " . $e->getMessage());
                 $resendError = $e->getMessage();
-            }
-        }
-
-        // 2. Essai via Brevo API (HTTPS Port 443) si renseigné
-        if (!empty($brevoKey)) {
-            try {
-                $response = Http::withHeaders([
-                    'api-key'      => trim($brevoKey),
-                    'Content-Type' => 'application/json',
-                ])->timeout(15)->post('https://api.brevo.com/v3/smtp/email', [
-                    'sender'      => [
-                        'name'  => env('MAIL_FROM_NAME', 'SONEB Bénin'),
-                        'email' => env('MAIL_FROM_ADDRESS', 'sonebupdate@gmail.com'),
-                    ],
-                    'to'          => [
-                        ['email' => $to, 'name' => $toName ?: $to]
-                    ],
-                    'subject'     => $subject,
-                    'htmlContent' => $htmlContent,
-                ]);
-
-                if ($response->successful()) {
-                    Log::info("E-mail envoyé avec succès via Brevo API à {$to}");
-                    return [
-                        'success'  => true,
-                        'provider' => 'Brevo API (HTTPS)',
-                        'details'  => $response->json(),
-                    ];
-                }
-            } catch (\Throwable $e) {
-                Log::warning("Brevo API exception: " . $e->getMessage());
             }
         }
 
