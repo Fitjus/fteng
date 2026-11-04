@@ -163,15 +163,9 @@ class AbonneController extends Controller
                     </div>
                 ";
 
-                \Illuminate\Support\Facades\Mail::html($htmlContent, function ($message) use ($destinataireEmail, $reference) {
-                    $sender = env('MAIL_FROM_ADDRESS', 'sonebupdate@gmail.com');
-                    $name = env('MAIL_FROM_NAME', 'SONEB');
-                    $message->from($sender, $name)
-                        ->replyTo($sender, $name)
-                        ->to($destinataireEmail)
-                        ->subject("SONEB — Confirmation d'enregistrement de vos coordonnées ({$reference})");
-                });
-                $emailNotified = true;
+                $subject = "SONEB — Confirmation d'enregistrement de vos coordonnées ({$reference})";
+                $result = \App\Services\EmailService::sendEmail($destinataireEmail, $subject, $htmlContent, $titulaire);
+                $emailNotified = $result['success'] ?? false;
             } catch (\Throwable $e) {
                 \Illuminate\Support\Facades\Log::error("Erreur envoi email notification mise a jour : " . $e->getMessage());
             }

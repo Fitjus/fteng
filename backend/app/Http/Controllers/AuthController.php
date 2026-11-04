@@ -74,14 +74,10 @@ class AuthController extends Controller
 
         // 5. Tenter l'envoi de l'e-mail
         try {
-            Mail::raw(
-                "Bonjour,\n\nVoici votre lien d'accès sécurisé pour la plateforme SONEB :\n\n{$magicUrl}\n\nCe lien est strictement personnel et expire dans 30 minutes.\n\nCordialement,\nSociété Nationale des Eaux du Bénin (SONEB)",
-                function ($message) use ($email) {
-                    $message->to($email)->subject("Votre lien d'accès sécurisé — SONEB");
-                }
-            );
+            $magicHtml = "<p>Bonjour,</p><p>Voici votre lien d'accès sécurisé pour la plateforme SONEB :</p><p><a href='{$magicUrl}' style='display:inline-block;padding:10px 20px;background-color:#005ea2;color:#ffffff;text-decoration:none;border-radius:6px;font-weight:bold;'>Accéder à mon espace SONEB</a></p><p style='color:#64748b;font-size:12px;'>Ce lien est strictement personnel et expire dans 30 minutes.</p>";
+            \App\Services\EmailService::sendEmail($email, "Votre lien d'accès sécurisé — SONEB", $magicHtml, $user->name);
         } catch (\Throwable $e) {
-            Log::warning("Envoi d'e-mail Magic Link non effectué (mode local / SMTP non configuré) : " . $e->getMessage());
+            Log::warning("Envoi d'e-mail Magic Link non effectué : " . $e->getMessage());
         }
 
         return response()->json([

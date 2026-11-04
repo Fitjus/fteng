@@ -205,9 +205,8 @@ export const AdminStagingPage: React.FC<AdminStagingPageProps> = ({ token }) => 
                     <td className="p-3.5">{item.email || '—'}</td>
                     <td className="p-3.5">
                       <span className="font-semibold block text-xs text-[#0b2b48]">{item.user?.email || item.nomop}</span>
-                      {item.user?.email && item.nomop !== item.user?.email && (
-                        <span className="text-[11px] text-slate-400">{item.nomop}</span>
-                      )}
+                      {item.user?.email && item.nomop !== item.user?.email 
+                      }
                     </td>
                     <td className="p-3.5 text-xs text-slate-500">{item.datesais}</td>
                     <td className="p-3.5 text-center">

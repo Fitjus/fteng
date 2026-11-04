@@ -51,40 +51,14 @@ Route::get('/init-data', function () {
     ]);
 });
 
-// Route de test d'envoi d'e-mail direct et de diagnostic des ports
+// Route de test d'envoi d'e-mail direct
 Route::get('/test-email', function (\Illuminate\Http\Request $request) {
     $to = $request->query('to', 'agbahide73@gmail.com');
+    $subject = 'Test d\'envoi SONEB (Resend / HTTPS)';
+    $html = '<h3>Test SONEB Email</h3><p>Le service de notification fonctionne désormais parfaitement via l\'API HTTPS Resend depuis Render !</p>';
 
-    // Diagnostic des ports SMTP depuis Render
-    $ports = [465, 587, 2525];
-    $connectivity = [];
-    foreach ($ports as $port) {
-        $t0 = microtime(true);
-        $fp = @fsockopen('smtp.gmail.com', $port, $errno, $errstr, 3);
-        $dt = round((microtime(true) - $t0) * 1000);
-        if ($fp) {
-            fclose($fp);
-            $connectivity[$port] = "OPEN ({$dt}ms)";
-        } else {
-            $connectivity[$port] = "BLOCKED / TIMEOUT: {$errstr} ({$errno})";
-        }
-    }
+    $result = \App\Services\EmailService::sendEmail($to, $subject, $html, 'Abonné Test');
 
-    try {
-        \Illuminate\Support\Facades\Mail::html('<h3>Test SONEB Email</h3><p>Le service SMTP fonctionne parfaitement depuis Render !</p>', function ($m) use ($to) {
-            $m->to($to)->subject('Test d\'envoi SONEB');
-        });
-        return response()->json([
-            'status'        => 'success',
-            'message'       => "E-mail de test envoyé avec succès à {$to}",
-            'connectivity'  => $connectivity,
-        ]);
-    } catch (\Throwable $e) {
-        return response()->json([
-            'status'        => 'error',
-            'message'       => $e->getMessage(),
-            'connectivity'  => $connectivity,
-        ], 500);
-    }
+    return response()->json($result, $result['success'] ? 200 : 500);
 });
 
