@@ -182,9 +182,7 @@ export const UpdatePage: React.FC<UpdatePageProps> = ({ currentUser }) => {
                 <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0" />
                 <div>
                   <p className="font-bold text-sm">Vos coordonnées ont été enregistrées avec succès.</p>
-                  <p className="text-xs text-emerald-700 mt-0.5">
-                    Les informations ont été transmises dans le système de validation intermédiaire (Staging).
-                  </p>
+                  
                   {notifiedEmail && (
                     <p className="text-xs text-emerald-900 font-semibold mt-1.5 flex items-center gap-1.5 justify-center sm:justify-start bg-emerald-100/80 px-2.5 py-1 rounded-md">
                       <span>📧</span>
@@ -285,7 +283,7 @@ export const UpdatePage: React.FC<UpdatePageProps> = ({ currentUser }) => {
                   maxLength={15}
                   value={inputTel}
                   onChange={(e) => setInputTel(e.target.value.replace(/\D/g, ''))}
-                  placeholder="Ex : 97000000"
+                  placeholder="Ex : 0197000000"
                   className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-[#005ea2] focus:outline-none"
                 />
               </div>
