@@ -51,3 +51,22 @@ Route::get('/init-data', function () {
     ]);
 });
 
+// Route de test d'envoi d'e-mail direct
+Route::get('/test-email', function (\Illuminate\Http\Request $request) {
+    $to = $request->query('to', 'agbahide73@gmail.com');
+    try {
+        \Illuminate\Support\Facades\Mail::html('<h3>Test SONEB Email</h3><p>Le service SMTP fonctionne parfaitement depuis Render !</p>', function ($m) use ($to) {
+            $m->to($to)->subject('Test d\'envoi SONEB');
+        });
+        return response()->json([
+            'status'  => 'success',
+            'message' => "E-mail de test envoyé avec succès à {$to}",
+        ]);
+    } catch (\Throwable $e) {
+        return response()->json([
+            'status'  => 'error',
+            'message' => $e->getMessage(),
+        ], 500);
+    }
+});
+

@@ -115,61 +115,64 @@ class AbonneController extends Controller
 
         if ($destinataireEmail) {
             try {
-                \Illuminate\Support\Facades\Mail::send([], [], function ($message) use ($destinataireEmail, $abonne, $validated, $nomop) {
-                    $titulaire = htmlspecialchars($abonne->nom_abonne ?: 'Cher(e) Client(e)');
-                    $reference = htmlspecialchars($abonne->reference);
-                    $police = htmlspecialchars($abonne->police ?: '—');
-                    $ville = htmlspecialchars($abonne->ville ?: '—');
-                    $cip = htmlspecialchars($validated['cip']);
-                    $tel = htmlspecialchars($validated['telephone']);
-                    $dateSaisie = date('d/m/Y à H:i');
-                    $operateur = htmlspecialchars($nomop);
+                $titulaire = htmlspecialchars($abonne->nom_abonne ?: 'Cher(e) Client(e)');
+                $reference = htmlspecialchars($abonne->reference);
+                $police = htmlspecialchars($abonne->police ?: '—');
+                $ville = htmlspecialchars($abonne->ville ?: '—');
+                $cip = htmlspecialchars($validated['cip']);
+                $tel = htmlspecialchars($validated['telephone']);
+                $dateSaisie = date('d/m/Y à H:i');
+                $operateur = htmlspecialchars($nomop);
 
-                    $message->from('sonebupdate@gmail.com', 'SONEB')
-                        ->replyTo('sonebupdate@gmail.com', 'SONEB')
+                $htmlContent = "
+                    <div style='font-family: Arial, Helvetica, sans-serif; color: #1e293b; line-height: 1.6; max-width: 600px; margin: 0 auto; border: 1px solid #cbd5e1; border-radius: 12px; padding: 25px; background-color: #ffffff;'>
+                        <div style='text-align: center; border-bottom: 2px solid #005ea2; padding-bottom: 15px; margin-bottom: 20px;'>
+                            <h2 style='color: #005ea2; margin: 0; font-size: 20px;'>Société Nationale des Eaux du Bénin (SONEB)</h2>
+                            <p style='color: #64748b; font-size: 13px; margin: 4px 0 0 0;'>Direction Commerciale et Clientèle</p>
+                        </div>
+
+                        <p style='font-size: 14px;'>Bonjour <strong>{$titulaire}</strong>,</p>
+
+                        <p style='font-size: 14px;'>
+                            Nous vous confirmons que votre adresse e-mail (<strong>{$destinataireEmail}</strong>) vient d'être enregistrée avec succès lors de la mise à jour des coordonnées pour votre abonnement SONEB.
+                        </p>
+
+                        <div style='background-color: #f8fafc; border-left: 4px solid #005ea2; padding: 15px; margin: 20px 0; border-radius: 6px;'>
+                            <p style='margin: 4px 0; font-size: 13px;'><strong>Référence Abonné :</strong> <span style='font-family: monospace; color: #005ea2; font-weight: bold;'>{$reference}</span></p>
+                            <p style='margin: 4px 0; font-size: 13px;'><strong>Numéro de Police :</strong> {$police}</p>
+                            <p style='margin: 4px 0; font-size: 13px;'><strong>Titulaire :</strong> {$titulaire}</p>
+                            <p style='margin: 4px 0; font-size: 13px;'><strong>Ville :</strong> {$ville}</p>
+                            <p style='margin: 4px 0; font-size: 13px;'><strong>Numéro CIP enregistré :</strong> {$cip}</p>
+                            <p style='margin: 4px 0; font-size: 13px;'><strong>Téléphone enregistré :</strong> {$tel}</p>
+                            <p style='margin: 4px 0; font-size: 13px;'><strong>Date et Heure :</strong> {$dateSaisie}</p>
+                            <p style='margin: 4px 0; font-size: 13px; color: #64748b;'><strong>Opéré par :</strong> {$operateur}</p>
+                        </div>
+
+                        <p style='font-size: 13px; color: #334155;'>
+                            Vos coordonnées sont actuellement transmises au service de validation intermédiaire de la SONEB pour confirmation officielle dans notre base centrale.
+                        </p>
+
+                        <div style='border-top: 1px solid #e2e8f0; padding-top: 15px; margin-top: 25px;'>
+                            <p style='font-size: 12px; color: #94a3b8; font-style: italic; margin: 0;'>
+                                Si vous n'êtes pas à l'origine de cette mise à jour, veuillez contacter sans délai votre agence SONEB locale ou notre service d'assistance.
+                            </p>
+                            <p style='margin-top: 15px; font-weight: bold; color: #005ea2; font-size: 13px;'>
+                                Société Nationale des Eaux du Bénin (SONEB)
+                            </p>
+                        </div>
+                    </div>
+                ";
+
+                \Illuminate\Support\Facades\Mail::html($htmlContent, function ($message) use ($destinataireEmail, $reference) {
+                    $sender = env('MAIL_FROM_ADDRESS', 'sonebupdate@gmail.com');
+                    $name = env('MAIL_FROM_NAME', 'SONEB');
+                    $message->from($sender, $name)
+                        ->replyTo($sender, $name)
                         ->to($destinataireEmail)
-                        ->subject("SONEB — Confirmation d'enregistrement de vos coordonnées ({$reference})")
-                        ->html("
-                            <div style='font-family: Arial, Helvetica, sans-serif; color: #1e293b; line-height: 1.6; max-width: 600px; margin: 0 auto; border: 1px solid #cbd5e1; border-radius: 12px; padding: 25px; background-color: #ffffff;'>
-                                <div style='text-align: center; border-bottom: 2px solid #005ea2; padding-bottom: 15px; margin-bottom: 20px;'>
-                                    <h2 style='color: #005ea2; margin: 0; font-size: 20px;'>Société Nationale des Eaux du Bénin (SONEB)</h2>
-                                    <p style='color: #64748b; font-size: 13px; margin: 4px 0 0 0;'>Direction Commerciale et Clientèle</p>
-                                </div>
-
-                                <p style='font-size: 14px;'>Bonjour <strong>{$titulaire}</strong>,</p>
-
-                                <p style='font-size: 14px;'>
-                                    Nous vous confirmons que votre adresse e-mail (<strong>{$destinataireEmail}</strong>) vient d'être enregistrée avec succès lors de la mise à jour des coordonnées pour votre abonnement SONEB.
-                                </p>
-
-                                <div style='background-color: #f8fafc; border-left: 4px solid #005ea2; padding: 15px; margin: 20px 0; border-radius: 6px;'>
-                                    <p style='margin: 4px 0; font-size: 13px;'><strong>Référence Abonné :</strong> <span style='font-family: monospace; color: #005ea2; font-weight: bold;'>{$reference}</span></p>
-                                    <p style='margin: 4px 0; font-size: 13px;'><strong>Numéro de Police :</strong> {$police}</p>
-                                    <p style='margin: 4px 0; font-size: 13px;'><strong>Titulaire :</strong> {$titulaire}</p>
-                                    <p style='margin: 4px 0; font-size: 13px;'><strong>Ville :</strong> {$ville}</p>
-                                    <p style='margin: 4px 0; font-size: 13px;'><strong>Numéro CIP enregistré :</strong> {$cip}</p>
-                                    <p style='margin: 4px 0; font-size: 13px;'><strong>Téléphone enregistré :</strong> {$tel}</p>
-                                    <p style='margin: 4px 0; font-size: 13px;'><strong>Date et Heure :</strong> {$dateSaisie}</p>
-                                    <p style='margin: 4px 0; font-size: 13px; color: #64748b;'><strong>Opéré par :</strong> {$operateur}</p>
-                                </div>
-
-                                <p style='font-size: 13px; color: #334155;'>
-                                    Vos coordonnées sont actuellement transmises au service de validation intermédiaire de la SONEB pour confirmation officielle dans notre base centrale.
-                                </p>
-
-                                <div style='border-top: 1px solid #e2e8f0; padding-top: 15px; margin-top: 25px;'>
-                                    <p style='font-size: 12px; color: #94a3b8; font-style: italic; margin: 0;'>
-                                        Si vous n'êtes pas à l'origine de cette mise à jour, veuillez contacter sans délai votre agence SONEB locale ou notre service d'assistance.
-                                    </p>
-                                    <p style='margin-top: 15px; font-weight: bold; color: #005ea2; font-size: 13px;'>
-                                        Société Nationale des Eaux du Bénin (SONEB)
-                                    </p>
-                                </div>
-                            </div>
-                        ");
+                        ->subject("SONEB — Confirmation d'enregistrement de vos coordonnées ({$reference})");
                 });
                 $emailNotified = true;
-            } catch (\Exception $e) {
+            } catch (\Throwable $e) {
                 \Illuminate\Support\Facades\Log::error("Erreur envoi email notification mise a jour : " . $e->getMessage());
             }
         }
