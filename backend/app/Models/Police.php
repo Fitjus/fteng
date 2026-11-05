@@ -25,6 +25,7 @@ class Police extends Model
         'cip',
         'telephone',
         'email',
+        'cip_document_path',
         'datesais',
         'nomop',
     ];

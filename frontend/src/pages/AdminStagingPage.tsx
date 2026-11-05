@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ShieldCheck, FileSpreadsheet, RefreshCw } from 'lucide-react';
+import { ShieldCheck, FileSpreadsheet, RefreshCw, FileText, ExternalLink } from 'lucide-react';
 import api, { API_BASE } from '../services/api';
 import type { StagingItem } from '../types';
 
@@ -140,6 +140,21 @@ export const AdminStagingPage: React.FC<AdminStagingPageProps> = ({ token }) => 
                     <span className="text-slate-400 block text-[10px] uppercase">Téléphone</span>
                     <span className="font-mono font-semibold text-slate-800">{item.telephone}</span>
                   </div>
+                  {item.cip_document_path && (
+                    <div className="col-span-2">
+                      <span className="text-slate-400 block text-[10px] uppercase">Pièce justificative CIP</span>
+                      <a
+                        href={`${API_BASE}/admin/staging/${item.id}/document?token=${token}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 text-xs text-[#005ea2] hover:text-[#0b2b48] font-semibold bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2.5 py-1 rounded-md mt-0.5 transition"
+                      >
+                        <FileText className="w-3.5 h-3.5" />
+                        <span>Voir la pièce scannée</span>
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </div>
+                  )}
                   <div className="col-span-2">
                     <span className="text-slate-400 block text-[10px] uppercase">Email de contact saisi</span>
                     <span className="text-slate-800 break-all">{item.email || '—'}</span>
@@ -190,6 +205,7 @@ export const AdminStagingPage: React.FC<AdminStagingPageProps> = ({ token }) => 
                   <th className="p-3.5">Référence</th>
                   <th className="p-3.5">CIP</th>
                   <th className="p-3.5">Téléphone</th>
+                  <th className="p-3.5">Pièce CIP</th>
                   <th className="p-3.5">Email Contact</th>
                   <th className="p-3.5">Compte auteur (Email)</th>
                   <th className="p-3.5">Date</th>
@@ -202,6 +218,23 @@ export const AdminStagingPage: React.FC<AdminStagingPageProps> = ({ token }) => 
                     <td className="p-3.5 font-mono font-bold text-[#0b2b48]">{item.reference}</td>
                     <td className="p-3.5 font-mono">{item.cip}</td>
                     <td className="p-3.5 font-mono">{item.telephone}</td>
+                    <td className="p-3.5">
+                      {item.cip_document_path ? (
+                        <a
+                          href={`${API_BASE}/admin/staging/${item.id}/document?token=${token}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1 text-xs text-[#005ea2] hover:underline font-semibold bg-blue-50 border border-blue-200 px-2 py-0.5 rounded"
+                          title="Visualiser le scan"
+                        >
+                          <FileText className="w-3.5 h-3.5" />
+                          <span>Voir scan</span>
+                          <ExternalLink className="w-2.5 h-2.5" />
+                        </a>
+                      ) : (
+                        <span className="text-xs text-slate-400 italic">Non fourni</span>
+                      )}
+                    </td>
                     <td className="p-3.5">{item.email || '—'}</td>
                     <td className="p-3.5">
                       <span className="font-semibold block text-xs text-[#0b2b48]">{item.user?.email || item.nomop}</span>

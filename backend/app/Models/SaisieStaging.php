@@ -16,6 +16,7 @@ class SaisieStaging extends Model
         'cip',
         'telephone',
         'email',
+        'cip_document_path',
         'datesais',
         'nomop',
         'user_id',

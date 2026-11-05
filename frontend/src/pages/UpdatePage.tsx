@@ -4,7 +4,11 @@ import {
   AlertTriangle, 
   RefreshCw, 
   ChevronRight, 
-  Send 
+  Send,
+  UploadCloud,
+  FileText,
+  Image as ImageIcon,
+  X
 } from 'lucide-react';
 import api from '../services/api';
 import type { AbonneInfo, CurrentUser } from '../types';
@@ -23,14 +27,61 @@ export const UpdatePage: React.FC<UpdatePageProps> = ({ currentUser }) => {
   const [errorMessage, setErrorMessage] = useState('');
   const [abonne, setAbonne] = useState<AbonneInfo | null>(null);
 
-  // Étape 2 : Coordonnées (non préremplies)
+  // Étape 2 : Coordonnées
   const [inputCip, setInputCip] = useState('');
   const [inputTel, setInputTel] = useState('');
   const [inputEmail, setInputEmail] = useState('');
+  const [cipFile, setCipFile] = useState<File | null>(null);
+  const [fileError, setFileError] = useState('');
+
   const [saisieLoading, setSaisieLoading] = useState(false);
   const [saisieError, setSaisieError] = useState('');
   const [saisieSuccess, setSaisieSuccess] = useState(false);
   const [notifiedEmail, setNotifiedEmail] = useState<string | null>(null);
+
+  // Filtre strict : Bloque catégoriquement les espaces et les caractères spéciaux à la frappe
+  const handleDigitsKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    const allowedControlKeys = [
+      'Backspace', 'Delete', 'Tab', 'Escape', 'Enter', 
+      'ArrowLeft', 'ArrowRight', 'Home', 'End'
+    ];
+    if (allowedControlKeys.includes(e.key) || e.ctrlKey || e.metaKey) {
+      return;
+    }
+    // Si la touche n'est pas un chiffre de 0 à 9 (incluant l'espace ' '), bloquer l'événement
+    if (!/^[0-9]$/.test(e.key)) {
+      e.preventDefault();
+    }
+  };
+
+  // Filtre au copier-coller : élimine immédiatement espaces, tirets et caractères non numériques
+  const handlePasteDigitsOnly = (setter: React.Dispatch<React.SetStateAction<string>>, maxLen: number) => 
+    (e: React.ClipboardEvent<HTMLInputElement>) => {
+      e.preventDefault();
+      const text = e.clipboardData.getData('text');
+      const clean = text.replace(/\D/g, '').slice(0, maxLen);
+      setter(clean);
+    };
+
+  // Gestion de l'import de fichier scan CIP (PDF ou Image, max 10 Mo)
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFileError('');
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const validTypes = ['application/pdf', 'image/jpeg', 'image/png', 'image/jpg'];
+    if (!validTypes.includes(file.type)) {
+      setFileError('Format non supporté. Veuillez choisir un document PDF ou une image (JPG, PNG).');
+      return;
+    }
+
+    if (file.size > 10 * 1024 * 1024) {
+      setFileError('Le fichier sélectionné dépasse la taille maximale autorisée (10 Mo).');
+      return;
+    }
+
+    setCipFile(file);
+  };
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -49,10 +100,11 @@ export const UpdatePage: React.FC<UpdatePageProps> = ({ currentUser }) => {
     try {
       const res = await api.get(`/abonnes/${cleanRef}`);
       setAbonne(res.data);
-      // Champs coordonnées : CIP et Tel vierges, Email pré-renseigné avec l'email vérifié mais modifiable
       setInputCip('');
       setInputTel('');
       setInputEmail(currentUser?.email || '');
+      setCipFile(null);
+      setFileError('');
       setCurrentStep(2);
     } catch (err: any) {
       if (err.response?.status === 404) {
@@ -69,16 +121,40 @@ export const UpdatePage: React.FC<UpdatePageProps> = ({ currentUser }) => {
     e.preventDefault();
     if (!abonne) return;
 
+    // Nettoyage strict supplémentaire de sécurité
+    const cleanTel = inputTel.replace(/\D/g, '');
+    const cleanCip = inputCip.replace(/\D/g, '');
+
+    if (!cleanTel || cleanTel.length < 8) {
+      setSaisieError('Veuillez renseigner un numéro de téléphone valide (au moins 8 chiffres).');
+      return;
+    }
+
+    if (!cleanCip) {
+      setSaisieError('Veuillez renseigner un numéro CIP valide.');
+      return;
+    }
+
     setSaisieLoading(true);
     setSaisieError('');
     setSaisieSuccess(false);
 
     try {
-      const res = await api.post('/saisies', {
-        reference: abonne.reference,
-        cip: inputCip,
-        telephone: inputTel,
-        email: inputEmail || null,
+      const formData = new FormData();
+      formData.append('reference', abonne.reference);
+      formData.append('cip', cleanCip);
+      formData.append('telephone', cleanTel);
+      if (inputEmail?.trim()) {
+        formData.append('email', inputEmail.trim());
+      }
+      if (cipFile) {
+        formData.append('cip_document', cipFile);
+      }
+
+      const res = await api.post('/saisies', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
       });
 
       setSaisieSuccess(true);
@@ -86,6 +162,8 @@ export const UpdatePage: React.FC<UpdatePageProps> = ({ currentUser }) => {
       setInputCip('');
       setInputTel('');
       setInputEmail('');
+      setCipFile(null);
+      setFileError('');
     } catch (err: any) {
       setSaisieError(err.response?.data?.message || 'Erreur lors de l\'enregistrement des coordonnées.');
     } finally {
@@ -133,7 +211,7 @@ export const UpdatePage: React.FC<UpdatePageProps> = ({ currentUser }) => {
       {currentStep === 1 && (
         <div className="max-w-md w-full mx-auto space-y-5 pt-2">
           <div className="text-center">
-            <h2 className="text-sm sm:text-base font-semibold text-slate-800">
+            <h2 className="text-sm sm:base font-semibold text-slate-800">
               Veuillez saisir votre numéro de référence abonné
             </h2>
             <p className="text-xs text-slate-500 mt-1">
@@ -198,6 +276,7 @@ export const UpdatePage: React.FC<UpdatePageProps> = ({ currentUser }) => {
                   setCurrentStep(1);
                   setSearchRef('');
                   setAbonne(null);
+                  setCipFile(null);
                 }}
                 className="w-full sm:w-auto bg-emerald-700 hover:bg-emerald-800 text-white text-xs px-4 py-2 rounded-lg font-medium transition cursor-pointer"
               >
@@ -259,33 +338,53 @@ export const UpdatePage: React.FC<UpdatePageProps> = ({ currentUser }) => {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Numéro CIP (15 chiffres max) *
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-semibold text-slate-700">
+                    Numéro CIP (15 chiffres max) *
+                  </label>
+                  <span className="text-[10px] text-slate-400 font-medium">Chiffres uniquement</span>
+                </div>
                 <input
                   type="text"
                   required
+                  inputMode="numeric"
+                  pattern="[0-9]*"
                   maxLength={15}
                   value={inputCip}
+                  onKeyDown={handleDigitsKeyDown}
+                  onPaste={handlePasteDigitsOnly(setInputCip, 15)}
                   onChange={(e) => setInputCip(e.target.value.replace(/\D/g, ''))}
                   placeholder="Ex : 123456789012345"
                   className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-[#005ea2] focus:outline-none"
                 />
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Sans espace ni tiret
+                </p>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-700 mb-1">
-                  Numéro de Téléphone *
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-semibold text-slate-700">
+                    Numéro de Téléphone *
+                  </label>
+                  <span className="text-[10px] text-slate-400 font-medium">Chiffres uniquement</span>
+                </div>
                 <input
                   type="tel"
                   required
+                  inputMode="numeric"
+                  pattern="[0-9]*"
                   maxLength={15}
                   value={inputTel}
+                  onKeyDown={handleDigitsKeyDown}
+                  onPaste={handlePasteDigitsOnly(setInputTel, 15)}
                   onChange={(e) => setInputTel(e.target.value.replace(/\D/g, ''))}
                   placeholder="Ex : 0197000000"
                   className="w-full px-3.5 py-2.5 bg-white border border-slate-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-[#005ea2] focus:outline-none"
                 />
+                <p className="text-[11px] text-slate-400 mt-1">
+                  Sans espace ni caractères spéciaux (ex : 0197000000)
+                </p>
               </div>
             </div>
 
@@ -303,12 +402,81 @@ export const UpdatePage: React.FC<UpdatePageProps> = ({ currentUser }) => {
               />
             </div>
 
+            {/* Champ ajout scan carte CIP (Facultatif) */}
+            <div className="pt-1">
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-semibold text-slate-700">
+                  Scan ou photo de la carte CIP
+                </label>
+                <span className="text-[10px] font-semibold text-slate-500 bg-slate-100 border border-slate-200 px-2 py-0.5 rounded-full">
+                  Facultatif
+                </span>
+              </div>
+
+              {!cipFile ? (
+                <label className="border-2 border-dashed border-slate-300 hover:border-[#005ea2] bg-slate-50/60 hover:bg-blue-50/30 rounded-xl p-4 flex flex-col items-center justify-center cursor-pointer transition group">
+                  <UploadCloud className="w-7 h-7 text-slate-400 group-hover:text-[#005ea2] transition mb-1" />
+                  <span className="text-xs font-semibold text-slate-700 group-hover:text-[#005ea2] text-center">
+                    Cliquez ici pour joindre une copie scannée de votre carte CIP
+                  </span>
+                  <span className="text-[11px] text-slate-400 mt-0.5 text-center">
+                    Formats acceptés : PDF, JPG, PNG (10 Mo max)
+                  </span>
+                  <input
+                    type="file"
+                    accept=".pdf,image/png,image/jpeg,image/jpg"
+                    onChange={handleFileChange}
+                    className="hidden"
+                  />
+                </label>
+              ) : (
+                <div className="border border-slate-200 bg-slate-50 rounded-xl p-3 flex items-center justify-between shadow-xs">
+                  <div className="flex items-center space-x-3 overflow-hidden">
+                    <div className="w-9 h-9 rounded-lg bg-blue-100 flex items-center justify-center text-[#005ea2] flex-shrink-0">
+                      {cipFile.type === 'application/pdf' ? (
+                        <FileText className="w-5 h-5" />
+                      ) : (
+                        <ImageIcon className="w-5 h-5" />
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-slate-800 truncate">
+                        {cipFile.name}
+                      </p>
+                      <p className="text-[11px] text-slate-400">
+                        {(cipFile.size / (1024 * 1024)).toFixed(2)} Mo • Fichier prêt à être envoyé
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCipFile(null);
+                      setFileError('');
+                    }}
+                    className="text-slate-400 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 transition cursor-pointer"
+                    title="Supprimer ce fichier"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+
+              {fileError && (
+                <p className="text-xs text-red-600 mt-1.5 flex items-center gap-1">
+                  <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+                  <span>{fileError}</span>
+                </p>
+              )}
+            </div>
+
             <div className="flex flex-col-reverse sm:flex-row items-center justify-between gap-3 pt-3">
               <button
                 type="button"
                 onClick={() => {
                   setCurrentStep(1);
                   setSaisieSuccess(false);
+                  setCipFile(null);
                 }}
                 className="text-xs text-slate-500 hover:text-slate-800 font-semibold py-2 cursor-pointer"
               >

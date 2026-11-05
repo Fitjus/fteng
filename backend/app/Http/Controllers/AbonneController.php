@@ -75,17 +75,28 @@ class AbonneController extends Controller
     public function storeSaisie(Request $request)
     {
         $validated = $request->validate([
-            'reference' => 'required|string|size:14|exists:polices,reference',
-            'cip'       => 'required|string|max:15|regex:/^[0-9]+$/',
-            'telephone' => 'required|string|max:15|regex:/^[0-9]+$/',
-            'email'     => 'nullable|email|max:100',
+            'reference'    => 'required|string|size:14|exists:polices,reference',
+            'cip'          => 'required|string|max:15|regex:/^[0-9]+$/',
+            'telephone'    => 'required|string|min:8|max:15|regex:/^[0-9]+$/',
+            'email'        => 'nullable|email|max:100',
+            'cip_document' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
         ], [
-            'cip.regex'       => 'Le CIP doit être composé uniquement de chiffres (max 15).',
-            'telephone.regex' => 'Le téléphone doit être composé uniquement de chiffres (max 15).',
-            'email.email'     => 'L\'adresse e-mail est invalide.',
+            'cip.regex'          => 'Le CIP doit être composé uniquement de chiffres (sans espaces ni caractères spéciaux, max 15).',
+            'telephone.regex'    => 'Le numéro de téléphone ne doit contenir aucun espace ni caractère spécial, uniquement des chiffres.',
+            'telephone.min'      => 'Le numéro de téléphone doit comporter au moins 8 chiffres.',
+            'telephone.max'      => 'Le numéro de téléphone ne doit pas dépasser 15 chiffres.',
+            'email.email'        => 'L\'adresse e-mail est invalide.',
+            'cip_document.mimes' => 'Le document de la carte CIP doit être au format PDF ou image (JPG, JPEG, PNG).',
+            'cip_document.max'   => 'Le fichier de la carte CIP ne doit pas dépasser 10 Mo.',
         ]);
 
         $abonne = Police::where('reference', $validated['reference'])->firstOrFail();
+
+        // Enregistrement sécurisé du scan de la carte CIP si fourni (facultatif)
+        $cipDocPath = null;
+        if ($request->hasFile('cip_document') && $request->file('cip_document')->isValid()) {
+            $cipDocPath = $request->file('cip_document')->store('cip_documents', 'public');
+        }
 
         // Récupérer l'utilisateur connecté s'il y en a un (nom véritable + email sans 'Abonné')
         $user = auth('sanctum')->user() ?? $request->user();
@@ -99,14 +110,15 @@ class AbonneController extends Controller
 
         // Créer l'enregistrement dans la table tampon de staging
         $staging = SaisieStaging::create([
-            'reference' => $abonne->reference,
-            'cip'       => $validated['cip'],
-            'telephone' => $validated['telephone'],
-            'email'     => $validated['email'] ?? null,
-            'datesais'  => now()->toDateString(),                        // Date du jour automatique
-            'nomop'     => mb_substr($nomop, 0, 250),                    // Nom véritable et email lié
-            'user_id'   => $userId,
-            'statut'    => 'en_attente',
+            'reference'         => $abonne->reference,
+            'cip'               => $validated['cip'],
+            'telephone'         => $validated['telephone'],
+            'email'             => $validated['email'] ?? null,
+            'cip_document_path' => $cipDocPath,
+            'datesais'          => now()->toDateString(),                        // Date du jour automatique
+            'nomop'             => mb_substr($nomop, 0, 250),                    // Nom véritable et email lié
+            'user_id'           => $userId,
+            'statut'            => 'en_attente',
         ]);
 
         // Envoi de la notification par e-mail à l'adresse inscrite parmi les coordonnées saisies
@@ -144,6 +156,7 @@ class AbonneController extends Controller
                             <p style='margin: 4px 0; font-size: 13px;'><strong>Ville :</strong> {$ville}</p>
                             <p style='margin: 4px 0; font-size: 13px;'><strong>Numéro CIP enregistré :</strong> {$cip}</p>
                             <p style='margin: 4px 0; font-size: 13px;'><strong>Téléphone enregistré :</strong> {$tel}</p>
+                            <p style='margin: 4px 0; font-size: 13px;'><strong>Scan pièce CIP :</strong> " . ($cipDocPath ? "<span style='color: #16a34a; font-weight: bold;'>Pièce scannée jointe</span>" : "<span style='color: #94a3b8;'>Non fourni (facultatif)</span>") . "</p>
                             <p style='margin: 4px 0; font-size: 13px;'><strong>Date et Heure :</strong> {$dateSaisie}</p>
                             <p style='margin: 4px 0; font-size: 13px; color: #64748b;'><strong>Opéré par :</strong> {$operateur}</p>
                         </div>

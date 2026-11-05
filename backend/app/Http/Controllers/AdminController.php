@@ -6,6 +6,7 @@ use Illuminate\Http\Request;
 use App\Models\Police;
 use App\Models\SaisieStaging;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 
 class AdminController extends Controller
 {
@@ -59,11 +60,12 @@ class AdminController extends Controller
             // 1. Mettre à jour la table officielle SONEB
             $police = Police::where('reference', $staging->reference)->firstOrFail();
             $police->update([
-                'cip'       => $staging->cip,
-                'telephone' => $staging->telephone,
-                'email'     => $staging->email,
-                'datesais'  => $staging->datesais,
-                'nomop'     => $staging->nomop,
+                'cip'               => $staging->cip,
+                'telephone'         => $staging->telephone,
+                'email'             => $staging->email,
+                'cip_document_path' => $staging->cip_document_path,
+                'datesais'          => $staging->datesais,
+                'nomop'             => $staging->nomop,
             ]);
 
             // 2. Marquer la saisie comme validée dans le staging
@@ -113,6 +115,13 @@ class AdminController extends Controller
      */
     public function export(Request $request)
     {
+        if (!$request->user() && $request->filled('token')) {
+            $tokenModel = \Laravel\Sanctum\PersonalAccessToken::findToken($request->query('token'));
+            if ($tokenModel && $tokenModel->tokenable) {
+                auth()->setUser($tokenModel->tokenable);
+            }
+        }
+
         $this->checkAdmin($request);
 
         $polices = Police::whereNotNull('cip')
@@ -142,5 +151,29 @@ class AdminController extends Controller
             'Content-Type'        => 'text/csv; charset=UTF-8',
             'Content-Disposition' => 'attachment; filename="soneb_mises_a_jour_' . date('Ymd_His') . '.csv"',
         ]);
+    }
+
+    /**
+     * Visualiser / Télécharger le document scanné de la carte CIP
+     */
+    public function document(Request $request, $id)
+    {
+        // Support de l'authentification par query token pour ouverture directe dans un nouvel onglet
+        if (!$request->user() && $request->filled('token')) {
+            $tokenModel = \Laravel\Sanctum\PersonalAccessToken::findToken($request->query('token'));
+            if ($tokenModel && $tokenModel->tokenable) {
+                auth()->setUser($tokenModel->tokenable);
+            }
+        }
+
+        $this->checkAdmin($request);
+
+        $staging = SaisieStaging::findOrFail($id);
+
+        if (!$staging->cip_document_path || !Storage::disk('public')->exists($staging->cip_document_path)) {
+            abort(404, 'Aucun document scanné associé à cette fiche.');
+        }
+
+        return Storage::disk('public')->response($staging->cip_document_path);
     }
 }
