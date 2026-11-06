@@ -77,15 +77,16 @@ class AbonneController extends Controller
         $validated = $request->validate([
             'reference'    => 'required|string|size:14|exists:polices,reference',
             'cip'          => 'required|string|max:15|regex:/^[0-9]+$/',
-            'telephone'    => 'required|string|min:8|max:15|regex:/^[0-9]+$/',
-            'email'        => 'nullable|email|max:100',
+            'telephone'    => 'required|string|size:10|regex:/^[0-9]{10}$/',
+            'email'        => ['nullable', 'string', 'email:rfc', 'max:100', 'regex:/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/'],
             'cip_document' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
         ], [
             'cip.regex'          => 'Le CIP doit être composé uniquement de chiffres (sans espaces ni caractères spéciaux, max 15).',
-            'telephone.regex'    => 'Le numéro de téléphone ne doit contenir aucun espace ni caractère spécial, uniquement des chiffres.',
-            'telephone.min'      => 'Le numéro de téléphone doit comporter au moins 8 chiffres.',
-            'telephone.max'      => 'Le numéro de téléphone ne doit pas dépasser 15 chiffres.',
+            'telephone.required' => 'Le numéro de téléphone est obligatoire.',
+            'telephone.size'     => 'Le numéro de téléphone doit comporter exactement 10 chiffres (ex : 0197000000).',
+            'telephone.regex'    => 'Le numéro de téléphone ne doit contenir aucun espace ni caractère spécial, uniquement 10 chiffres.',
             'email.email'        => 'L\'adresse e-mail est invalide.',
+            'email.regex'        => 'L\'adresse e-mail doit comporter un nom de domaine valide (ex : exemple@domaine.com, .fr, .bj, etc.).',
             'cip_document.mimes' => 'Le document de la carte CIP doit être au format PDF ou image (JPG, JPEG, PNG).',
             'cip_document.max'   => 'Le fichier de la carte CIP ne doit pas dépasser 10 Mo.',
         ]);
