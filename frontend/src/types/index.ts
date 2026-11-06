@@ -22,6 +22,9 @@ export interface AbonneInfo {
   email: string | null;
   datesais: string | null;
   nomop: string | null;
+  already_submitted?: boolean;
+  submission_status?: 'en_attente' | 'valide' | 'rejete' | null;
+  motif_rejet?: string | null;
   has_staging_pending: boolean;
   staging_pending?: {
     cip: string;

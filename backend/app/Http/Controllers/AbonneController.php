@@ -31,40 +31,64 @@ class AbonneController extends Controller
             ], 404);
         }
 
-        // 3. Vérifier si une saisie est déjà en cours dans le staging
-        $staging = SaisieStaging::where('reference', $abonne->reference)
+        // 3. Vérifier si les coordonnées ont déjà été saisies (déjà validées ou en attente)
+        $isOfficiallyUpdated = !empty($abonne->telephone) || !empty($abonne->cip);
+
+        $stagingPending = SaisieStaging::where('reference', $abonne->reference)
             ->where('statut', 'en_attente')
             ->latest()
             ->first();
 
-        return response()->json([
-            'found'         => true,
-            'reference'     => $abonne->reference,
-            'ref_prec'      => $abonne->ref_prec,
-            'departement'   => $abonne->departement,
-            'agence'        => $abonne->agence,
-            'centre'        => $abonne->centre,
-            'police'        => $abonne->police,
-            'etat_abo'      => $abonne->etat_abo,
-            'etat_comp'     => $abonne->etat_comp,
-            'nom_abonne'    => $abonne->nom_abonne,
-            'ville'         => $abonne->ville,
-            
-            // Données officielles déjà consolidées
-            'cip'           => $abonne->cip,
-            'telephone'     => $abonne->telephone,
-            'email'         => $abonne->email,
-            'datesais'      => $abonne->datesais?->format('Y-m-d'),
-            'nomop'         => $abonne->nomop,
+        $stagingValide = SaisieStaging::where('reference', $abonne->reference)
+            ->where('statut', 'valide')
+            ->latest()
+            ->first();
 
-            // Statut de staging en cours
-            'has_staging_pending' => $staging !== null,
-            'staging_pending'     => $staging ? [
-                'cip'       => $staging->cip,
-                'telephone' => $staging->telephone,
-                'email'     => $staging->email,
-                'datesais'  => $staging->datesais->format('Y-m-d'),
-                'nomop'     => $staging->nomop,
+        $stagingRejete = SaisieStaging::where('reference', $abonne->reference)
+            ->where('statut', 'rejete')
+            ->latest()
+            ->first();
+
+        $alreadySubmitted = $isOfficiallyUpdated || ($stagingPending !== null) || ($stagingValide !== null);
+        $submissionStatus = ($isOfficiallyUpdated || $stagingValide) ? 'valide' : ($stagingPending ? 'en_attente' : ($stagingRejete ? 'rejete' : null));
+
+        // Déterminer les coordonnées actuelles à afficher
+        $currentCip = $abonne->cip ?: $stagingPending?->cip ?: $stagingValide?->cip;
+        $currentTel = $abonne->telephone ?: $stagingPending?->telephone ?: $stagingValide?->telephone;
+        $currentEmail = $abonne->email ?: $stagingPending?->email ?: $stagingValide?->email;
+        $currentDate = ($abonne->datesais ?: $stagingPending?->datesais ?: $stagingValide?->datesais)?->format('d/m/Y');
+        $currentNomop = $abonne->nomop ?: $stagingPending?->nomop ?: $stagingValide?->nomop;
+
+        return response()->json([
+            'found'               => true,
+            'reference'           => $abonne->reference,
+            'ref_prec'            => $abonne->ref_prec,
+            'departement'         => $abonne->departement,
+            'agence'              => $abonne->agence,
+            'centre'              => $abonne->centre,
+            'police'              => $abonne->police,
+            'etat_abo'            => $abonne->etat_abo,
+            'etat_comp'           => $abonne->etat_comp,
+            'nom_abonne'          => $abonne->nom_abonne,
+            'ville'               => $abonne->ville,
+            
+            // Coordonnées et statut d'enregistrement anti-doublon
+            'cip'                 => $currentCip,
+            'telephone'           => $currentTel,
+            'email'               => $currentEmail,
+            'datesais'            => $currentDate,
+            'nomop'               => $currentNomop,
+            'already_submitted'   => $alreadySubmitted,
+            'submission_status'   => $submissionStatus,
+            'has_staging_pending' => $stagingPending !== null,
+            'motif_rejet'         => ($submissionStatus === 'rejete') ? $stagingRejete?->motif_rejet : null,
+
+            'staging_pending'     => $stagingPending ? [
+                'cip'       => $stagingPending->cip,
+                'telephone' => $stagingPending->telephone,
+                'email'     => $stagingPending->email,
+                'datesais'  => $stagingPending->datesais->format('d/m/Y'),
+                'nomop'     => $stagingPending->nomop,
             ] : null,
         ]);
     }
@@ -92,6 +116,33 @@ class AbonneController extends Controller
         ]);
 
         $abonne = Police::where('reference', $validated['reference'])->firstOrFail();
+
+        // 1. Empêcher toute double saisie si une saisie est déjà en cours de validation
+        $existingPending = SaisieStaging::where('reference', $abonne->reference)
+            ->where('statut', 'en_attente')
+            ->first();
+
+        if ($existingPending) {
+            return response()->json([
+                'message'           => 'Les coordonnées de cet abonné ont déjà été saisies et sont en cours de validation par la SONEB. Une nouvelle saisie n\'est pas autorisée.',
+                'already_submitted' => true,
+                'submission_status' => 'en_attente',
+            ], 422);
+        }
+
+        // 2. Empêcher toute nouvelle saisie si les coordonnées sont déjà validées
+        $isOfficiallyUpdated = !empty($abonne->telephone) || !empty($abonne->cip);
+        $existingValide = SaisieStaging::where('reference', $abonne->reference)
+            ->where('statut', 'valide')
+            ->first();
+
+        if ($isOfficiallyUpdated || $existingValide) {
+            return response()->json([
+                'message'           => 'Les coordonnées de cet abonné sont déjà enregistrées et validées. Une nouvelle saisie n\'est pas autorisée.',
+                'already_submitted' => true,
+                'submission_status' => 'valide',
+            ], 422);
+        }
 
         // Enregistrement sécurisé du scan de la carte CIP si fourni (facultatif)
         $cipDocPath = null;
