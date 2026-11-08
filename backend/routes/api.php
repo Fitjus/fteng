@@ -17,6 +17,11 @@ Route::post('/auth/google/callback', [AuthController::class, 'handleGoogleCallba
 Route::post('/auth/magic-link', [AuthController::class, 'sendMagicLink']);
 Route::post('/auth/verify-magic-link', [AuthController::class, 'verifyMagicLink']);
 
+// Diagnostic & Test connectivité IBM Db2 (Serveur en ligne)
+Route::get('/test-db2', function (\App\Services\Db2Service $db2) {
+    return response()->json($db2->testConnection());
+});
+
 // 2. Consultation & Téléchargement direct sécurisés (supportent Bearer ou ?token=...)
 Route::get('/admin/staging/{id}/document', [AdminController::class, 'document']);
 Route::get('/admin/export', [AdminController::class, 'export']);

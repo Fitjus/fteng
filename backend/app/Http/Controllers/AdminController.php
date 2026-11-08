@@ -5,11 +5,20 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\Police;
 use App\Models\SaisieStaging;
+use App\Services\Db2Service;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Log;
 
 class AdminController extends Controller
 {
+    protected Db2Service $db2;
+
+    public function __construct(Db2Service $db2)
+    {
+        $this->db2 = $db2;
+    }
+
     /**
      * Vérifier que l'utilisateur est bien admin
      */
@@ -57,16 +66,34 @@ class AdminController extends Controller
                 ->lockForUpdate()
                 ->firstOrFail();
 
-            // 1. Mettre à jour la table officielle SONEB
-            $police = Police::where('reference', $staging->reference)->firstOrFail();
-            $police->update([
-                'cip'               => $staging->cip,
-                'telephone'         => $staging->telephone,
-                'email'             => $staging->email,
-                'cip_document_path' => $staging->cip_document_path,
-                'datesais'          => $staging->datesais,
-                'nomop'             => $staging->nomop,
-            ]);
+            // 1. Mettre à jour la table officielle SONEB (Local / Supabase)
+            $police = Police::where('reference', $staging->reference)->first();
+            if ($police) {
+                $police->update([
+                    'cip'               => $staging->cip,
+                    'telephone'         => $staging->telephone,
+                    'email'             => $staging->email,
+                    'cip_document_path' => $staging->cip_document_path,
+                    'datesais'          => $staging->datesais,
+                    'nomop'             => $staging->nomop,
+                ]);
+            }
+
+            // 2. Mettre à jour la table officielle POLPF d'IBM Db2 si configuré
+            if (env('DB2_HOST') && $this->db2->isExtensionLoaded()) {
+                try {
+                    $this->db2->updateAbonneOfficial(
+                        reference: $staging->reference,
+                        cip: $staging->cip,
+                        telephone: $staging->telephone,
+                        email: $staging->email,
+                        nomop: $request->user()->name ?? 'ADMIN_SONEB'
+                    );
+                    Log::info("Coordonnées validées et intégrées dans la table officielle POLPF d'IBM Db2 pour {$staging->reference}");
+                } catch (\Throwable $e) {
+                    Log::error("Erreur mise à jour POLPF Db2 pour {$staging->reference} : " . $e->getMessage());
+                }
+            }
 
             // 2. Marquer la saisie comme validée dans le staging
             $staging->update([

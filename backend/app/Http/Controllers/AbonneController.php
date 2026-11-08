@@ -5,9 +5,18 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use App\Models\Police;
 use App\Models\SaisieStaging;
+use App\Services\Db2Service;
+use Illuminate\Support\Facades\Log;
 
 class AbonneController extends Controller
 {
+    protected Db2Service $db2;
+
+    public function __construct(Db2Service $db2)
+    {
+        $this->db2 = $db2;
+    }
+
     /**
      * Recherche d'un abonné par sa référence (14 car.) ou ancienne référence (fallback)
      */
@@ -15,6 +24,19 @@ class AbonneController extends Controller
     {
         $ref = strtoupper(trim($reference));
 
+        // Tentative 1 : Interrogation directe d'IBM Db2 (Fichier POLPF) si configuré
+        if (env('DB2_HOST') && $this->db2->isExtensionLoaded()) {
+            try {
+                $abonneDb2 = $this->db2->findAbonne($ref);
+                if ($abonneDb2) {
+                    return response()->json(array_merge(['found' => true], $abonneDb2));
+                }
+            } catch (\Throwable $e) {
+                Log::warning("Recherche Db2 POLPF échouée ({$ref}), fallback local : " . $e->getMessage());
+            }
+        }
+
+        // Tentative 2 : Recherche locale / Supabase (Fallback)
         // 1. Recherche par référence active
         $abonne = Police::where('reference', $ref)->first();
 
@@ -99,7 +121,7 @@ class AbonneController extends Controller
     public function storeSaisie(Request $request)
     {
         $validated = $request->validate([
-            'reference'    => 'required|string|size:14|exists:polices,reference',
+            'reference'    => 'required|string|size:14',
             'cip'          => 'required|string|size:15|regex:/^[0-9]{15}$/',
             'telephone'    => 'required|string|size:10|regex:/^[0-9]{10}$/',
             'email'        => ['nullable', 'string', 'email:rfc', 'max:100', 'regex:/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/'],
@@ -117,19 +139,50 @@ class AbonneController extends Controller
             'cip_document.max'   => 'Le fichier de la carte CIP ne doit pas dépasser 10 Mo.',
         ]);
 
-        $abonne = Police::where('reference', $validated['reference'])->firstOrFail();
+        $ref = strtoupper(trim($validated['reference']));
 
-        // 1. Empêcher toute double saisie si les coordonnées ont déjà été enregistrées
-        $existingPending = SaisieStaging::where('reference', $abonne->reference)
+        // Recherche de l'abonné (Local/Supabase ou Db2 POLPF)
+        $abonne = Police::where('reference', $ref)->first();
+        $abonneDb2 = null;
+
+        if (!$abonne && env('DB2_HOST') && $this->db2->isExtensionLoaded()) {
+            try {
+                $abonneDb2 = $this->db2->findAbonne($ref);
+            } catch (\Throwable $e) {
+                Log::warning("Recherche Db2 storeSaisie : " . $e->getMessage());
+            }
+        }
+
+        if (!$abonne && !$abonneDb2) {
+            return response()->json([
+                'message' => 'Abonné inexistant. Vérifiez votre référence.',
+            ], 404);
+        }
+
+        // 1. Empêcher toute double saisie :
+        // a) Vérification dans POLPFZ (Table de staging AS/400)
+        $existingDb2Staging = null;
+        if (env('DB2_HOST') && $this->db2->isExtensionLoaded()) {
+            try {
+                $existingDb2Staging = $this->db2->findExistingSaisie($ref);
+            } catch (\Throwable $e) {
+                // Ignore
+            }
+        }
+
+        // b) Vérification locale / Supabase
+        $existingPending = SaisieStaging::where('reference', $ref)
             ->where('statut', 'en_attente')
             ->first();
 
-        $isOfficiallyUpdated = !empty($abonne->telephone) || !empty($abonne->cip);
-        $existingValide = SaisieStaging::where('reference', $abonne->reference)
+        $isOfficiallyUpdated = (!empty($abonne?->telephone) || !empty($abonne?->cip))
+            || (!empty($abonneDb2['telephone']) || !empty($abonneDb2['cip']));
+
+        $existingValide = SaisieStaging::where('reference', $ref)
             ->where('statut', 'valide')
             ->first();
 
-        if ($existingPending || $isOfficiallyUpdated || $existingValide) {
+        if ($existingDb2Staging || $existingPending || $isOfficiallyUpdated || $existingValide) {
             return response()->json([
                 'message'           => 'Les coordonnées de cet abonné ont déjà été enregistrées. Une nouvelle saisie n\'est pas autorisée.',
                 'already_submitted' => true,
@@ -148,19 +201,36 @@ class AbonneController extends Controller
             $cleanName = trim(preg_replace('/^Abonné\s+/iu', '', $user->name));
             $nomop = $user->email ? "{$cleanName} ({$user->email})" : $cleanName;
         } else {
-            $nomop = 'En ligne';
+            $nomop = 'PORTAIL_WEB';
         }
         $userId = $user ? $user->id : null;
 
-        // Créer l'enregistrement dans la table tampon de staging
+        // 2. INSERTION DANS LA TABLE DE STAGING POLPFZ D'IBM Db2
+        if (env('DB2_HOST') && $this->db2->isExtensionLoaded()) {
+            try {
+                $this->db2->insertCoordonnees(
+                    reference: $ref,
+                    cip: $validated['cip'],
+                    telephone: $validated['telephone'],
+                    email: $validated['email'] ?? null,
+                    nomop: $nomop,
+                    cipDocPath: $cipDocPath
+                );
+                Log::info("Coordonnées insérées avec succès dans le staging POLPFZ d'IBM Db2 pour {$ref}");
+            } catch (\Throwable $e) {
+                Log::error("Erreur insertion dans staging POLPFZ Db2 pour {$ref} : " . $e->getMessage());
+            }
+        }
+
+        // 3. Créer également l'enregistrement dans la table locale SaisieStaging (pour le dashboard admin web)
         $staging = SaisieStaging::create([
-            'reference'         => $abonne->reference,
+            'reference'         => $ref,
             'cip'               => $validated['cip'],
             'telephone'         => $validated['telephone'],
             'email'             => $validated['email'] ?? null,
             'cip_document_path' => $cipDocPath,
-            'datesais'          => now()->toDateString(),                        // Date du jour automatique
-            'nomop'             => mb_substr($nomop, 0, 250),                    // Nom véritable et email lié
+            'datesais'          => now()->toDateString(),
+            'nomop'             => mb_substr($nomop, 0, 250),
             'user_id'           => $userId,
             'statut'            => 'en_attente',
         ]);
@@ -171,10 +241,10 @@ class AbonneController extends Controller
 
         if ($destinataireEmail) {
             try {
-                $titulaire = htmlspecialchars($abonne->nom_abonne ?: 'Cher(e) Client(e)');
-                $reference = htmlspecialchars($abonne->reference);
-                $police = htmlspecialchars($abonne->police ?: '—');
-                $ville = htmlspecialchars($abonne->ville ?: '—');
+                $titulaire = htmlspecialchars($abonne?->nom_abonne ?? $abonneDb2['nom_abonne'] ?? 'Cher(e) Client(e)');
+                $reference = htmlspecialchars($abonne?->reference ?? $ref);
+                $police = htmlspecialchars($abonne?->police ?? $abonneDb2['police'] ?? '—');
+                $ville = htmlspecialchars($abonne?->ville ?? $abonneDb2['ville'] ?? '—');
                 $cip = htmlspecialchars($validated['cip']);
                 $tel = htmlspecialchars($validated['telephone']);
                 $dateSaisie = date('d/m/Y à H:i');

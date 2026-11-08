@@ -112,6 +112,17 @@ return [
             // 'trust_server_certificate' => env('DB_TRUST_SERVER_CERTIFICATE', 'false'),
         ],
 
+        'db2' => [
+            'driver'   => 'db2',
+            'host'     => env('DB2_HOST', ''),
+            'port'     => env('DB2_PORT', 446),
+            'database' => env('DB2_DATABASE', 'SAMPLE'),
+            'library'  => env('DB2_LIBRARY', ''),
+            'username' => env('DB2_USERNAME', ''),
+            'password' => env('DB2_PASSWORD', ''),
+            'prefix'   => '',
+        ],
+
     ],
 
     /*

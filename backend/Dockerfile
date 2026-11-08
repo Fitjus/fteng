@@ -8,8 +8,22 @@ RUN apt-get update && apt-get install -y \
     unzip \
     curl \
     git \
+    build-essential \
     && docker-php-ext-install pdo pdo_pgsql pdo_mysql zip bcmath opcache \
-    && a2enmod rewrite \
+    && a2enmod rewrite
+
+# Installation du pilote IBM Db2 CLI Driver (clidriver) & extension PHP ibm_db2
+ENV IBM_DB_DIR=/opt/clidriver
+ENV LD_LIBRARY_PATH=/opt/clidriver/lib:${LD_LIBRARY_PATH}
+
+RUN mkdir -p /opt \
+    && curl -fsSL https://public.dhe.ibm.com/ibmdl/export/pub/software/data/db2/drivers/odbc_cli/linuxx64_odbc_cli.tar.gz -o /tmp/clidriver.tar.gz \
+    && tar -xzf /tmp/clidriver.tar.gz -C /opt \
+    && rm -f /tmp/clidriver.tar.gz \
+    && echo "/opt/clidriver/lib" > /etc/ld.so.conf.d/clidriver.conf \
+    && ldconfig \
+    && echo "/opt/clidriver" | pecl install ibm_db2 \
+    && docker-php-ext-enable ibm_db2 \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Installation de Composer
