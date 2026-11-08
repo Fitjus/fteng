@@ -18,105 +18,43 @@ class AbonneController extends Controller
     }
 
     /**
-     * Recherche d'un abonné par sa référence (14 car.) ou ancienne référence (fallback)
+     * Recherche d'un abonné par sa référence (14 car.) exclusivement sur IBM Db2 (Fichier POLPF)
      */
     public function show(Request $request, string $reference)
     {
         $ref = strtoupper(trim($reference));
 
-        // Tentative 1 : Interrogation directe d'IBM Db2 (Fichier POLPF) si configuré
-        if (env('DB2_HOST') && $this->db2->isExtensionLoaded()) {
-            try {
-                $abonneDb2 = $this->db2->findAbonne($ref);
-                if ($abonneDb2) {
-                    return response()->json(array_merge(['found' => true], $abonneDb2));
-                }
-            } catch (\Throwable $e) {
-                Log::warning("Recherche Db2 POLPF échouée ({$ref}), fallback local : " . $e->getMessage());
-            }
+        // Vérification stricte : La connexion IBM Db2 est requise (aucun fallback local/Supabase)
+        if (!env('DB2_HOST') || !$this->db2->isExtensionLoaded()) {
+            return response()->json([
+                'found'   => false,
+                'message' => 'Le service de base de données IBM Db2 n\'est pas encore configuré ou l\'extension ibm_db2 n\'est pas active sur ce serveur.',
+            ], 503);
         }
 
-        // Tentative 2 : Recherche locale / Supabase (Fallback)
-        // 1. Recherche par référence active
-        $abonne = Police::where('reference', $ref)->first();
-
-        // 2. Fallback par ancienne référence (Réf.préc.)
-        if (!$abonne) {
-            $abonne = Police::where('ref_prec', $ref)->first();
+        try {
+            $abonneDb2 = $this->db2->findAbonne($ref);
+        } catch (\Throwable $e) {
+            Log::error("Erreur consultation Db2 POLPF ({$ref}) : " . $e->getMessage());
+            return response()->json([
+                'found'   => false,
+                'message' => 'Impossible de joindre le serveur de base de données SONEB (Db2) : ' . $e->getMessage(),
+            ], 503);
         }
 
-        // Si introuvable : Message strict du cahier des charges
-        if (!$abonne) {
+        // Si introuvable dans POLPF
+        if (!$abonneDb2) {
             return response()->json([
                 'found'   => false,
                 'message' => 'Abonné inexistant. Vérifiez votre référence.',
             ], 404);
         }
 
-        // 3. Vérifier si les coordonnées ont déjà été saisies (déjà validées ou en attente)
-        $isOfficiallyUpdated = !empty($abonne->telephone) || !empty($abonne->cip);
-
-        $stagingPending = SaisieStaging::where('reference', $abonne->reference)
-            ->where('statut', 'en_attente')
-            ->latest()
-            ->first();
-
-        $stagingValide = SaisieStaging::where('reference', $abonne->reference)
-            ->where('statut', 'valide')
-            ->latest()
-            ->first();
-
-        $stagingRejete = SaisieStaging::where('reference', $abonne->reference)
-            ->where('statut', 'rejete')
-            ->latest()
-            ->first();
-
-        $alreadySubmitted = $isOfficiallyUpdated || ($stagingPending !== null) || ($stagingValide !== null);
-        $submissionStatus = ($isOfficiallyUpdated || $stagingValide) ? 'valide' : ($stagingPending ? 'en_attente' : ($stagingRejete ? 'rejete' : null));
-
-        // Déterminer les coordonnées actuelles à afficher
-        $currentCip = $abonne->cip ?: $stagingPending?->cip ?: $stagingValide?->cip;
-        $currentTel = $abonne->telephone ?: $stagingPending?->telephone ?: $stagingValide?->telephone;
-        $currentEmail = $abonne->email ?: $stagingPending?->email ?: $stagingValide?->email;
-        $currentDate = ($abonne->datesais ?: $stagingPending?->datesais ?: $stagingValide?->datesais)?->format('d/m/Y');
-        $currentNomop = $abonne->nomop ?: $stagingPending?->nomop ?: $stagingValide?->nomop;
-
-        return response()->json([
-            'found'               => true,
-            'reference'           => $abonne->reference,
-            'ref_prec'            => $abonne->ref_prec,
-            'departement'         => $abonne->departement,
-            'agence'              => $abonne->agence,
-            'centre'              => $abonne->centre,
-            'police'              => $abonne->police,
-            'etat_abo'            => $abonne->etat_abo,
-            'etat_comp'           => $abonne->etat_comp,
-            'nom_abonne'          => $abonne->nom_abonne,
-            'ville'               => $abonne->ville,
-            
-            // Coordonnées et statut d'enregistrement anti-doublon
-            'cip'                 => $currentCip,
-            'telephone'           => $currentTel,
-            'email'               => $currentEmail,
-            'datesais'            => $currentDate,
-            'nomop'               => $currentNomop,
-            'already_submitted'   => $alreadySubmitted,
-            'submission_status'   => $submissionStatus,
-            'has_staging_pending' => $stagingPending !== null,
-            'motif_rejet'         => ($submissionStatus === 'rejete') ? $stagingRejete?->motif_rejet : null,
-
-            'staging_pending'     => $stagingPending ? [
-                'cip'       => $stagingPending->cip,
-                'telephone' => $stagingPending->telephone,
-                'email'     => $stagingPending->email,
-                'datesais'  => $stagingPending->datesais->format('d/m/Y'),
-                'nomop'     => $stagingPending->nomop,
-            ] : null,
-        ]);
+        return response()->json(array_merge(['found' => true], $abonneDb2));
     }
 
     /**
-     * Enregistrement des informations dans le système intermédiaire (staging)
+     * Enregistrement des informations dans le système intermédiaire (staging POLPFZ sur IBM Db2)
      */
     public function storeSaisie(Request $request)
     {
@@ -141,48 +79,41 @@ class AbonneController extends Controller
 
         $ref = strtoupper(trim($validated['reference']));
 
-        // Recherche de l'abonné (Local/Supabase ou Db2 POLPF)
-        $abonne = Police::where('reference', $ref)->first();
-        $abonneDb2 = null;
-
-        if (!$abonne && env('DB2_HOST') && $this->db2->isExtensionLoaded()) {
-            try {
-                $abonneDb2 = $this->db2->findAbonne($ref);
-            } catch (\Throwable $e) {
-                Log::warning("Recherche Db2 storeSaisie : " . $e->getMessage());
-            }
+        // Vérification stricte : Connexion IBM Db2 requise (aucun fallback local/Supabase)
+        if (!env('DB2_HOST') || !$this->db2->isExtensionLoaded()) {
+            return response()->json([
+                'message' => 'Le service de base de données IBM Db2 n\'est pas encore configuré ou l\'extension ibm_db2 n\'est pas active.',
+            ], 503);
         }
 
-        if (!$abonne && !$abonneDb2) {
+        // 1. Recherche de l'abonné dans POLPF sur IBM Db2
+        try {
+            $abonneDb2 = $this->db2->findAbonne($ref);
+        } catch (\Throwable $e) {
+            Log::error("Erreur consultation Db2 POLPF storeSaisie ({$ref}) : " . $e->getMessage());
+            return response()->json([
+                'message' => 'Impossible de joindre le serveur de base de données SONEB (Db2) : ' . $e->getMessage(),
+            ], 503);
+        }
+
+        if (!$abonneDb2) {
             return response()->json([
                 'message' => 'Abonné inexistant. Vérifiez votre référence.',
             ], 404);
         }
 
-        // 1. Empêcher toute double saisie :
+        // 2. Empêcher toute double saisie :
         // a) Vérification dans POLPFZ (Table de staging AS/400)
-        $existingDb2Staging = null;
-        if (env('DB2_HOST') && $this->db2->isExtensionLoaded()) {
-            try {
-                $existingDb2Staging = $this->db2->findExistingSaisie($ref);
-            } catch (\Throwable $e) {
-                // Ignore
-            }
+        try {
+            $existingDb2Staging = $this->db2->findExistingSaisie($ref);
+        } catch (\Throwable $e) {
+            $existingDb2Staging = null;
         }
 
-        // b) Vérification locale / Supabase
-        $existingPending = SaisieStaging::where('reference', $ref)
-            ->where('statut', 'en_attente')
-            ->first();
+        // b) Vérification si déjà consolidé dans POLPF
+        $isOfficiallyUpdated = (!empty($abonneDb2['telephone']) || !empty($abonneDb2['cip']));
 
-        $isOfficiallyUpdated = (!empty($abonne?->telephone) || !empty($abonne?->cip))
-            || (!empty($abonneDb2['telephone']) || !empty($abonneDb2['cip']));
-
-        $existingValide = SaisieStaging::where('reference', $ref)
-            ->where('statut', 'valide')
-            ->first();
-
-        if ($existingDb2Staging || $existingPending || $isOfficiallyUpdated || $existingValide) {
+        if ($existingDb2Staging || $isOfficiallyUpdated) {
             return response()->json([
                 'message'           => 'Les coordonnées de cet abonné ont déjà été enregistrées. Une nouvelle saisie n\'est pas autorisée.',
                 'already_submitted' => true,
@@ -195,7 +126,7 @@ class AbonneController extends Controller
             $cipDocPath = $request->file('cip_document')->store('cip_documents', 'public');
         }
 
-        // Récupérer l'utilisateur connecté s'il y en a un (nom véritable + email sans 'Abonné')
+        // Identification de l'opérateur
         $user = auth('sanctum')->user() ?? $request->user();
         if ($user) {
             $cleanName = trim(preg_replace('/^Abonné\s+/iu', '', $user->name));
@@ -205,35 +136,40 @@ class AbonneController extends Controller
         }
         $userId = $user ? $user->id : null;
 
-        // 2. INSERTION DANS LA TABLE DE STAGING POLPFZ D'IBM Db2
-        if (env('DB2_HOST') && $this->db2->isExtensionLoaded()) {
-            try {
-                $this->db2->insertCoordonnees(
-                    reference: $ref,
-                    cip: $validated['cip'],
-                    telephone: $validated['telephone'],
-                    email: $validated['email'] ?? null,
-                    nomop: $nomop,
-                    cipDocPath: $cipDocPath
-                );
-                Log::info("Coordonnées insérées avec succès dans le staging POLPFZ d'IBM Db2 pour {$ref}");
-            } catch (\Throwable $e) {
-                Log::error("Erreur insertion dans staging POLPFZ Db2 pour {$ref} : " . $e->getMessage());
-            }
+        // 3. INSERTION STRICTE DANS LA TABLE DE STAGING POLPFZ D'IBM Db2 (Pas de fallback local)
+        try {
+            $this->db2->insertCoordonnees(
+                reference: $ref,
+                cip: $validated['cip'],
+                telephone: $validated['telephone'],
+                email: $validated['email'] ?? null,
+                nomop: $nomop,
+                cipDocPath: $cipDocPath
+            );
+            Log::info("Coordonnées insérées avec succès dans le staging POLPFZ d'IBM Db2 pour {$ref}");
+        } catch (\Throwable $e) {
+            Log::error("Erreur critique insertion staging POLPFZ Db2 ({$ref}) : " . $e->getMessage());
+            return response()->json([
+                'message' => "Erreur lors de l'enregistrement dans la base de données SONEB (POLPFZ) : " . $e->getMessage(),
+            ], 500);
         }
 
-        // 3. Créer également l'enregistrement dans la table locale SaisieStaging (pour le dashboard admin web)
-        $staging = SaisieStaging::create([
-            'reference'         => $ref,
-            'cip'               => $validated['cip'],
-            'telephone'         => $validated['telephone'],
-            'email'             => $validated['email'] ?? null,
-            'cip_document_path' => $cipDocPath,
-            'datesais'          => now()->toDateString(),
-            'nomop'             => mb_substr($nomop, 0, 250),
-            'user_id'           => $userId,
-            'statut'            => 'en_attente',
-        ]);
+        // 4. Trace locale optionnelle pour le document scanné / admin
+        try {
+            SaisieStaging::create([
+                'reference'         => $ref,
+                'cip'               => $validated['cip'],
+                'telephone'         => $validated['telephone'],
+                'email'             => $validated['email'] ?? null,
+                'cip_document_path' => $cipDocPath,
+                'datesais'          => now()->toDateString(),
+                'nomop'             => mb_substr($nomop, 0, 250),
+                'user_id'           => $userId,
+                'statut'            => 'en_attente',
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning("Impossible de créer l'entrée de staging locale : " . $e->getMessage());
+        }
 
         // Envoi de la notification par e-mail à l'adresse inscrite parmi les coordonnées saisies
         $emailNotified = false;
