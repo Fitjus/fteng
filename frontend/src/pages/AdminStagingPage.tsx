@@ -63,7 +63,7 @@ export const AdminStagingPage: React.FC<AdminStagingPageProps> = ({ token }) => 
         <div>
           <h2 className="text-lg sm:text-xl font-bold text-[#0b2b48] flex items-center space-x-2">
             <ShieldCheck className="w-5 h-5 sm:w-6 sm:h-6 text-[#005ea2] flex-shrink-0" />
-            <span>Système de Staging & Validation — SONEB</span>
+            <span>Système de Staging & Validation </span>
           </h2>
           <p className="text-xs text-slate-500 mt-1">
             Les fiches validées sont automatiquement intégrées dans la table officielle des abonnés.
@@ -106,7 +106,7 @@ export const AdminStagingPage: React.FC<AdminStagingPageProps> = ({ token }) => 
                 : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
             }`}
           >
-            {st === 'en_attente' ? '⏳ En attente' : st === 'valide' ? '✅ Validées' : '❌ Rejetées'}
+            {st === 'en_attente' ? 'En attente' : st === 'valide' ? 'Validées' : 'Rejetées'}
           </button>
         ))}
       </div>

@@ -276,14 +276,13 @@ export const UpdatePage: React.FC<UpdatePageProps> = ({ currentUser }) => {
           {saisieSuccess && (
             <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl flex flex-col sm:flex-row items-center justify-between gap-3 text-emerald-800 text-center sm:text-left">
               <div className="flex items-center space-x-3">
-                <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0" />
                 <div>
                   <p className="font-bold text-sm">Vos coordonnées ont été enregistrées avec succès.</p>
                   
                   {notifiedEmail && (
                     <p className="text-xs text-emerald-900 font-semibold mt-1.5 flex items-center gap-1.5 justify-center sm:justify-start bg-emerald-100/80 px-2.5 py-1 rounded-md">
-                      <span>📧</span>
-                      <span>Un e-mail de confirmation a été envoyé à <u>{notifiedEmail}</u>.</span>
+                    
+                      <span>Un e-mail a été envoyé à <u>{notifiedEmail}</u>.</span>
                     </p>
                   )}
                 </div>
@@ -463,7 +462,7 @@ export const UpdatePage: React.FC<UpdatePageProps> = ({ currentUser }) => {
                     }`}
                   />
                   <p className="text-[11px] text-slate-400 mt-1">
-                    Exactement 15 chiffres consécutifs sans espace (ex : 123456789012345)
+                    15 chiffres sans espace (ex : 123456789012345)
                   </p>
                 </div>
 
@@ -498,7 +497,7 @@ export const UpdatePage: React.FC<UpdatePageProps> = ({ currentUser }) => {
                     }`}
                   />
                   <p className="text-[11px] text-slate-400 mt-1">
-                    10 chiffres consécutifs sans espace ni indicatif (ex : 0197000000)
+                    10 chiffres sans espace ni indicatif (ex : 0197000000)
                   </p>
                 </div>
               </div>
@@ -515,7 +514,7 @@ export const UpdatePage: React.FC<UpdatePageProps> = ({ currentUser }) => {
                         : 'bg-amber-100 text-amber-700'
                     }`}>
                       {/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(inputEmail.trim())
-                        ? 'Format valide ✓'
+                        ? ''
                         : 'Extension manquante (@, .com, .fr...)'}
                     </span>
                   )}
@@ -534,9 +533,7 @@ export const UpdatePage: React.FC<UpdatePageProps> = ({ currentUser }) => {
                       : 'border-slate-300 focus:ring-[#005ea2]'
                   }`}
                 />
-                <p className="text-[11px] text-slate-400 mt-1">
-                  Doit être une adresse complète avec nom de domaine (ex : exemple@domaine.com)
-                </p>
+                
               </div>
 
               {/* Champ ajout scan carte CIP (Facultatif) */}
