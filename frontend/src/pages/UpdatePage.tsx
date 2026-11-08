@@ -170,6 +170,14 @@ export const UpdatePage: React.FC<UpdatePageProps> = ({ currentUser }) => {
 
       setSaisieSuccess(true);
       setNotifiedEmail(res.data.email_notified ? res.data.notified_email : null);
+      setAbonne(prev => prev ? {
+        ...prev,
+        already_submitted: true,
+        cip: cleanCip,
+        telephone: cleanTel,
+        email: emailTrimmed || null,
+        datesais: new Date().toLocaleDateString('fr-FR'),
+      } : null);
       setInputCip('');
       setInputTel('');
       setInputEmail('');
@@ -331,20 +339,23 @@ export const UpdatePage: React.FC<UpdatePageProps> = ({ currentUser }) => {
             </div>
           </div>
 
-          {/* Bloquer la double saisie si les coordonnées sont DÉJÀ enregistrées */}
-          {abonne.already_submitted ? (
+          {/* Masquer complètement le formulaire si déjà enregistré OU si la saisie vient de réussir */}
+          {abonne.already_submitted || saisieSuccess ? (
             <div className="space-y-4 pt-1">
-              <div className="p-4 rounded-xl border border-blue-200 bg-blue-50/80 text-[#0b2b48] flex items-start space-x-3.5 shadow-xs">
-                <CheckCircle2 className="w-5 h-5 text-[#005ea2] flex-shrink-0 mt-0.5" />
-                <div className="space-y-1">
-                  <h4 className="font-bold text-sm sm:text-base text-[#0b2b48]">
-                    Coordonnées déjà enregistrées
-                  </h4>
-                  <p className="text-xs sm:text-sm leading-relaxed text-slate-700">
-                    Les coordonnées de cet abonné sont déjà enregistrées pour cette référence. Une nouvelle saisie n'est pas autorisée.
-                  </p>
+              {/* Message d'information doublon UNIQUEMENT si ce n'est pas la saisie qui vient de réussir */}
+              {!saisieSuccess && (
+                <div className="p-4 rounded-xl border border-blue-200 bg-blue-50/80 text-[#0b2b48] flex items-start space-x-3.5 shadow-xs">
+                  <CheckCircle2 className="w-5 h-5 text-[#005ea2] flex-shrink-0 mt-0.5" />
+                  <div className="space-y-1">
+                    <h4 className="font-bold text-sm sm:text-base text-[#0b2b48]">
+                      Coordonnées déjà enregistrées
+                    </h4>
+                    <p className="text-xs sm:text-sm leading-relaxed text-slate-700">
+                      Les coordonnées de cet abonné sont déjà enregistrées pour cette référence. Une nouvelle saisie n'est pas autorisée.
+                    </p>
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Récapitulatif des coordonnées enregistrées (lecture seule) */}
               <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-5 shadow-xs space-y-3">
