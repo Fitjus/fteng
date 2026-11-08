@@ -100,12 +100,14 @@ class AbonneController extends Controller
     {
         $validated = $request->validate([
             'reference'    => 'required|string|size:14|exists:polices,reference',
-            'cip'          => 'required|string|max:15|regex:/^[0-9]+$/',
+            'cip'          => 'required|string|size:15|regex:/^[0-9]{15}$/',
             'telephone'    => 'required|string|size:10|regex:/^[0-9]{10}$/',
             'email'        => ['nullable', 'string', 'email:rfc', 'max:100', 'regex:/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/'],
             'cip_document' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
         ], [
-            'cip.regex'          => 'Le CIP doit être composé uniquement de chiffres (sans espaces ni caractères spéciaux, max 15).',
+            'cip.required'       => 'Le numéro CIP est obligatoire.',
+            'cip.size'           => 'Le numéro CIP doit comporter exactement 15 chiffres (ex : 123456789012345).',
+            'cip.regex'          => 'Le numéro CIP ne doit contenir aucun espace ni caractère spécial, uniquement 15 chiffres.',
             'telephone.required' => 'Le numéro de téléphone est obligatoire.',
             'telephone.size'     => 'Le numéro de téléphone doit comporter exactement 10 chiffres (ex : 0197000000).',
             'telephone.regex'    => 'Le numéro de téléphone ne doit contenir aucun espace ni caractère spécial, uniquement 10 chiffres.',
@@ -117,30 +119,20 @@ class AbonneController extends Controller
 
         $abonne = Police::where('reference', $validated['reference'])->firstOrFail();
 
-        // 1. Empêcher toute double saisie si une saisie est déjà en cours de validation
+        // 1. Empêcher toute double saisie si les coordonnées ont déjà été enregistrées
         $existingPending = SaisieStaging::where('reference', $abonne->reference)
             ->where('statut', 'en_attente')
             ->first();
 
-        if ($existingPending) {
-            return response()->json([
-                'message'           => 'Les coordonnées de cet abonné ont déjà été saisies et sont en cours de validation par la SONEB. Une nouvelle saisie n\'est pas autorisée.',
-                'already_submitted' => true,
-                'submission_status' => 'en_attente',
-            ], 422);
-        }
-
-        // 2. Empêcher toute nouvelle saisie si les coordonnées sont déjà validées
         $isOfficiallyUpdated = !empty($abonne->telephone) || !empty($abonne->cip);
         $existingValide = SaisieStaging::where('reference', $abonne->reference)
             ->where('statut', 'valide')
             ->first();
 
-        if ($isOfficiallyUpdated || $existingValide) {
+        if ($existingPending || $isOfficiallyUpdated || $existingValide) {
             return response()->json([
-                'message'           => 'Les coordonnées de cet abonné sont déjà enregistrées et validées. Une nouvelle saisie n\'est pas autorisée.',
+                'message'           => 'Les coordonnées de cet abonné ont déjà été enregistrées. Une nouvelle saisie n\'est pas autorisée.',
                 'already_submitted' => true,
-                'submission_status' => 'valide',
             ], 422);
         }
 
