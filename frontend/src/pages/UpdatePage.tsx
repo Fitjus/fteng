@@ -434,14 +434,13 @@ export const UpdatePage: React.FC<UpdatePageProps> = ({ currentUser }) => {
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <label className="block text-xs font-semibold text-slate-700">
-                      Numéro CIP (15 chiffres) *
+                      Numéro CIP *
                     </label>
                     <span className={`text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded ${
                       inputCip.length === 15
                         ? 'bg-emerald-100 text-emerald-700'
                         : 'bg-slate-100 text-slate-500'
                     }`}>
-                      {inputCip.length}/15
                     </span>
                   </div>
                   <input
@@ -462,21 +461,20 @@ export const UpdatePage: React.FC<UpdatePageProps> = ({ currentUser }) => {
                     }`}
                   />
                   <p className="text-[11px] text-slate-400 mt-1">
-                    15 chiffres sans espace (ex : 123456789012345)
+                    15 chiffres sans espace 
                   </p>
                 </div>
 
                 <div>
                   <div className="flex items-center justify-between mb-1">
                     <label className="block text-xs font-semibold text-slate-700">
-                      Numéro de Téléphone (10 chiffres) *
+                      Numéro de Téléphone *
                     </label>
                     <span className={`text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded ${
                       inputTel.length === 10
                         ? 'bg-emerald-100 text-emerald-700'
                         : 'bg-slate-100 text-slate-500'
                     }`}>
-                      {inputTel.length}/10
                     </span>
                   </div>
                   <input
@@ -497,7 +495,7 @@ export const UpdatePage: React.FC<UpdatePageProps> = ({ currentUser }) => {
                     }`}
                   />
                   <p className="text-[11px] text-slate-400 mt-1">
-                    10 chiffres sans espace ni indicatif (ex : 0197000000)
+                    10 chiffres sans espace ni indicatif
                   </p>
                 </div>
               </div>
@@ -505,7 +503,7 @@ export const UpdatePage: React.FC<UpdatePageProps> = ({ currentUser }) => {
               <div>
                 <div className="flex items-center justify-between mb-1">
                   <label className="block text-xs font-semibold text-slate-700">
-                    Adresse E-mail
+                    Adresse E-mail *
                   </label>
                   {inputEmail.trim() && (
                     <span className={`text-[10px] font-medium px-1.5 py-0.5 rounded ${
