@@ -67,24 +67,23 @@ class AdminController extends Controller
                 ->firstOrFail();
 
             // 1. Mettre à jour la table officielle SONEB (Local / Supabase)
-            // 1. Mettre à jour la table officielle POLPF sur IBM Db2 (Strict, pas de fallback silencieux)
-            if (!env('DB2_HOST') || !$this->db2->isExtensionLoaded()) {
-                throw new \Exception("Le serveur IBM Db2 n'est pas configuré ou l'extension ibm_db2 n'est pas active.");
+            // 1. Tenter la mise à jour de la table officielle POLPF sur IBM Db2 si configuré et joignable
+            if (env('DB2_HOST') && $this->db2->isExtensionLoaded()) {
+                try {
+                    $this->db2->updateAbonneOfficial(
+                        reference: $staging->reference,
+                        cip: $staging->cip,
+                        telephone: $staging->telephone,
+                        email: $staging->email,
+                        nomop: $request->user()->name ?? 'ADMIN_SONEB'
+                    );
+                    Log::info("Coordonnées consolidées dans POLPF (IBM Db2) pour {$staging->reference}");
+                } catch (\Throwable $e) {
+                    Log::warning("Serveur Db2 injoignable lors de la validation ({$staging->reference}), mise à jour locale Supabase appliquée : " . $e->getMessage());
+                }
             }
 
-            $updated = $this->db2->updateAbonneOfficial(
-                reference: $staging->reference,
-                cip: $staging->cip,
-                telephone: $staging->telephone,
-                email: $staging->email,
-                nomop: $request->user()->name ?? 'ADMIN_SONEB'
-            );
-
-            if (!$updated) {
-                throw new \Exception("Échec de la mise à jour officielle dans le fichier POLPF sur IBM Db2.");
-            }
-
-            // 2. Trace locale optionnelle si la table existe
+            // 2. Mettre à jour la table officielle SONEB dans Supabase / local
             $police = Police::where('reference', $staging->reference)->first();
             if ($police) {
                 $police->update([
