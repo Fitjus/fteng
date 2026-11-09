@@ -121,7 +121,8 @@ class AbonneController extends Controller
         $validated = $request->validate([
             'reference'    => 'required|string|size:14',
             'cip'          => 'required|string|size:15|regex:/^[0-9]{15}$/',
-            'telephone'    => 'required|string|size:10|regex:/^[0-9]{10}$/',
+            'telephone'    => 'required|string|min:8|max:20',
+            'indicatif'    => 'nullable|string|max:6',
             'email'        => ['nullable', 'string', 'email:rfc', 'max:100', 'regex:/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/'],
             'cip_document' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
         ], [
@@ -129,13 +130,45 @@ class AbonneController extends Controller
             'cip.size'           => 'Le numéro CIP doit comporter exactement 15 chiffres (ex : 123456789012345).',
             'cip.regex'          => 'Le numéro CIP ne doit contenir aucun espace ni caractère spécial, uniquement 15 chiffres.',
             'telephone.required' => 'Le numéro de téléphone est obligatoire.',
-            'telephone.size'     => 'Le numéro de téléphone doit comporter exactement 10 chiffres (ex : 0197000000).',
-            'telephone.regex'    => 'Le numéro de téléphone ne doit contenir aucun espace ni caractère spécial, uniquement 10 chiffres.',
             'email.email'        => 'L\'adresse e-mail est invalide.',
             'email.regex'        => 'L\'adresse e-mail doit comporter un nom de domaine valide (ex : exemple@domaine.com, .fr, .bj, etc.).',
             'cip_document.mimes' => 'Le document de la carte CIP doit être au format PDF ou image (JPG, JPEG, PNG).',
             'cip_document.max'   => 'Le fichier de la carte CIP ne doit pas dépasser 10 Mo.',
         ]);
+
+        $rawTel = trim($validated['telephone']);
+        $indicatif = $request->input('indicatif', '+229');
+        if (!str_starts_with($indicatif, '+')) {
+            $indicatif = '+' . $indicatif;
+        }
+
+        // Validation stricte du numéro selon l'indicatif pays
+        if (str_starts_with($rawTel, '+')) {
+            $fullTel = $rawTel;
+            if (str_starts_with($fullTel, '+229')) {
+                $localDigits = preg_replace('/\D/', '', substr($fullTel, 4));
+                if (strlen($localDigits) !== 10 || !str_starts_with($localDigits, '01')) {
+                    return response()->json([
+                        'message' => 'Pour le Bénin (+229), le numéro de téléphone doit comporter exactement 10 chiffres et commencer obligatoirement par 01 (ex : 0197000000).'
+                    ], 422);
+                }
+                $fullTel = '+229' . $localDigits;
+            }
+        } else {
+            $localDigits = preg_replace('/\D/', '', $rawTel);
+            if ($indicatif === '+229') {
+                if (strlen($localDigits) !== 10 || !str_starts_with($localDigits, '01')) {
+                    return response()->json([
+                        'message' => 'Pour le Bénin (+229), le numéro de téléphone doit comporter exactement 10 chiffres et commencer obligatoirement par 01 (ex : 0197000000).'
+                    ], 422);
+                }
+            } elseif (strlen($localDigits) < 6 || strlen($localDigits) > 15) {
+                return response()->json([
+                    'message' => 'Veuillez saisir un numéro de téléphone valide.'
+                ], 422);
+            }
+            $fullTel = $indicatif . $localDigits;
+        }
 
         $ref = strtoupper(trim($validated['reference']));
         $abonne = Police::where('reference', $ref)->first();
@@ -206,7 +239,7 @@ class AbonneController extends Controller
                 $this->db2->insertCoordonnees(
                     reference: $ref,
                     cip: $validated['cip'],
-                    telephone: $validated['telephone'],
+                    telephone: $fullTel,
                     email: $validated['email'] ?? null,
                     nomop: $nomop,
                     cipDocPath: $cipDocPath
@@ -221,7 +254,7 @@ class AbonneController extends Controller
         $staging = SaisieStaging::create([
             'reference'         => $ref,
             'cip'               => $validated['cip'],
-            'telephone'         => $validated['telephone'],
+            'telephone'         => $fullTel,
             'email'             => $validated['email'] ?? null,
             'cip_document_path' => $cipDocPath,
             'datesais'          => now()->toDateString(),
@@ -241,7 +274,7 @@ class AbonneController extends Controller
                 $police = htmlspecialchars($abonne?->police ?? $abonneDb2['police'] ?? '—');
                 $ville = htmlspecialchars($abonne?->ville ?? $abonneDb2['ville'] ?? '—');
                 $cip = htmlspecialchars($validated['cip']);
-                $tel = htmlspecialchars($validated['telephone']);
+                $tel = htmlspecialchars($fullTel);
                 $dateSaisie = date('d/m/Y à H:i');
                 $operateur = htmlspecialchars($nomop);
 

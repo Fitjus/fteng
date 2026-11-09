@@ -31,6 +31,7 @@ export const UpdatePage: React.FC<UpdatePageProps> = ({ currentUser }) => {
 
   // Étape 2 : Coordonnées
   const [inputCip, setInputCip] = useState('');
+  const [countryCode, setCountryCode] = useState('+229');
   const [inputTel, setInputTel] = useState('');
   const [inputEmail, setInputEmail] = useState('');
   const [cipFile, setCipFile] = useState<File | null>(null);
@@ -127,15 +128,29 @@ export const UpdatePage: React.FC<UpdatePageProps> = ({ currentUser }) => {
     const cleanTel = inputTel.replace(/\D/g, '');
     const cleanCip = inputCip.replace(/\D/g, '');
 
-    if (!cleanTel || cleanTel.length !== 10) {
-      setSaisieError('Le numéro de téléphone doit comporter exactement 10 chiffres (ex : 0197000000).');
-      return;
-    }
-
     if (!cleanCip || cleanCip.length !== 15) {
       setSaisieError('Le numéro CIP doit comporter exactement 15 chiffres (ex : 123456789012345).');
       return;
     }
+
+    if (countryCode === '+229') {
+      if (!cleanTel || cleanTel.length !== 10) {
+        setSaisieError('Pour le Bénin (+229), le numéro de téléphone doit comporter exactement 10 chiffres (ex : 0197000000).');
+        return;
+      }
+      if (!cleanTel.startsWith('01')) {
+        setSaisieError('Pour le Bénin (+229), les deux premiers chiffres après l\'indicatif doivent obligatoirement être 01 (ex : 0197000000).');
+        return;
+      }
+    } else {
+      if (!cleanTel || cleanTel.length < 6 || cleanTel.length > 15) {
+        setSaisieError('Veuillez saisir un numéro de téléphone valide pour l\'indicatif sélectionné.');
+        return;
+      }
+    }
+
+    const fullTel = `${countryCode}${cleanTel}`;
+    const formattedTelDisplay = `${countryCode} ${cleanTel}`;
 
     const emailTrimmed = inputEmail.trim();
     if (emailTrimmed) {
@@ -154,7 +169,9 @@ export const UpdatePage: React.FC<UpdatePageProps> = ({ currentUser }) => {
       const formData = new FormData();
       formData.append('reference', abonne.reference);
       formData.append('cip', cleanCip);
-      formData.append('telephone', cleanTel);
+      formData.append('telephone', fullTel);
+      formData.append('indicatif', countryCode);
+      formData.append('telephone_local', cleanTel);
       if (inputEmail?.trim()) {
         formData.append('email', inputEmail.trim());
       }
@@ -174,13 +191,14 @@ export const UpdatePage: React.FC<UpdatePageProps> = ({ currentUser }) => {
         ...prev,
         already_submitted: true,
         cip: cleanCip,
-        telephone: cleanTel,
+        telephone: formattedTelDisplay,
         email: emailTrimmed || null,
         datesais: new Date().toLocaleDateString('fr-FR'),
       } : null);
       setInputCip('');
       setInputTel('');
       setInputEmail('');
+      setCountryCode('+229');
       setCipFile(null);
       setFileError('');
     } catch (err: any) {
@@ -470,32 +488,62 @@ export const UpdatePage: React.FC<UpdatePageProps> = ({ currentUser }) => {
                     <label className="block text-xs font-semibold text-slate-700">
                       Numéro de Téléphone *
                     </label>
-                    <span className={`text-[10px] font-mono font-semibold px-1.5 py-0.5 rounded ${
-                      inputTel.length === 10
-                        ? 'bg-emerald-100 text-emerald-700'
-                        : 'bg-slate-100 text-slate-500'
-                    }`}>
-                    </span>
+                    {countryCode === '+229' && inputTel.length >= 2 && !inputTel.startsWith('01') && (
+                      <span className="text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">
+                        Doit commencer par 01
+                      </span>
+                    )}
                   </div>
-                  <input
-                    type="tel"
-                    required
-                    inputMode="numeric"
-                    pattern="[0-9]{10}"
-                    maxLength={10}
-                    value={inputTel}
-                    onKeyDown={handleDigitsKeyDown}
-                    onPaste={handlePasteDigitsOnly(setInputTel, 10)}
-                    onChange={(e) => setInputTel(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                    placeholder="Ex : 0197000000"
-                    className={`w-full px-3.5 py-2.5 bg-white border rounded-lg text-sm font-mono focus:ring-2 focus:outline-none transition ${
-                      inputTel.length === 10
-                        ? 'border-emerald-400 focus:ring-emerald-500'
-                        : 'border-slate-300 focus:ring-[#005ea2]'
-                    }`}
-                  />
+                  <div className="flex rounded-lg shadow-xs">
+                    <select
+                      value={countryCode}
+                      onChange={(e) => setCountryCode(e.target.value)}
+                      className="px-2.5 py-2.5 bg-slate-100 hover:bg-slate-200/70 border border-r-0 border-slate-300 rounded-l-lg text-xs font-semibold text-slate-700 focus:ring-2 focus:ring-[#005ea2] focus:outline-none transition cursor-pointer shrink-0"
+                    >
+                      <option value="+229">🇧🇯 +229 (Bénin)</option>
+                      <option value="+228">🇹🇬 +228 (Togo)</option>
+                      <option value="+234">🇳🇬 +234 (Nigéria)</option>
+                      <option value="+225">🇨🇮 +225 (Côte d'Ivoire)</option>
+                      <option value="+227">🇳🇪 +227 (Niger)</option>
+                      <option value="+226">🇧🇫 +226 (Burkina)</option>
+                      <option value="+221">🇸🇳 +221 (Sénégal)</option>
+                      <option value="+223">🇲🇱 +223 (Mali)</option>
+                      <option value="+233">🇬🇭 +233 (Ghana)</option>
+                      <option value="+33">🇫🇷 +33 (France)</option>
+                      <option value="+1">🇺🇸 +1 (USA / Canada)</option>
+                      <option value="+32">🇧🇪 +32 (Belgique)</option>
+                      <option value="+237">🇨🇲 +237 (Cameroun)</option>
+                      <option value="+241">🇬🇦 +241 (Gabon)</option>
+                      <option value="+242">🇨🇬 +242 (Congo)</option>
+                    </select>
+                    <input
+                      type="tel"
+                      required
+                      inputMode="numeric"
+                      pattern={countryCode === '+229' ? "01[0-9]{8}" : "[0-9]{6,15}"}
+                      maxLength={countryCode === '+229' ? 10 : 15}
+                      value={inputTel}
+                      onKeyDown={handleDigitsKeyDown}
+                      onPaste={handlePasteDigitsOnly(setInputTel, countryCode === '+229' ? 10 : 15)}
+                      onChange={(e) => setInputTel(e.target.value.replace(/\D/g, '').slice(0, countryCode === '+229' ? 10 : 15))}
+                      placeholder={countryCode === '+229' ? "Ex : 0197000000" : "Ex : 90000000"}
+                      className={`w-full px-3.5 py-2.5 bg-white border rounded-r-lg text-sm font-mono focus:ring-2 focus:outline-none transition ${
+                        countryCode === '+229'
+                          ? inputTel.length === 10 && inputTel.startsWith('01')
+                            ? 'border-emerald-400 focus:ring-emerald-500'
+                            : inputTel.length > 0
+                            ? 'border-amber-300 focus:ring-amber-400'
+                            : 'border-slate-300 focus:ring-[#005ea2]'
+                          : inputTel.length >= 8
+                          ? 'border-emerald-400 focus:ring-emerald-500'
+                          : 'border-slate-300 focus:ring-[#005ea2]'
+                      }`}
+                    />
+                  </div>
                   <p className="text-[11px] text-slate-400 mt-1">
-                    10 chiffres sans espace ni indicatif
+                    {countryCode === '+229'
+                      ? "10 chiffres commençant obligatoirement par 01"
+                      : "Chiffres sans espace après l'indicatif"}
                   </p>
                 </div>
               </div>
