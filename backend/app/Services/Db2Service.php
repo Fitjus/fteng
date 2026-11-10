@@ -30,7 +30,7 @@ class Db2Service
         }
 
         $host = config('database.connections.db2.host', env('DB2_HOST'));
-        $port = config('database.connections.db2.port', env('DB2_PORT', 446));
+        $port = config('database.connections.db2.port', env('DB2_PORT', 8082));
 
         if (empty($host)) {
             $this->serverReachable = false;
@@ -66,7 +66,7 @@ class Db2Service
         }
 
         $host = config('database.connections.db2.host', env('DB2_HOST'));
-        $port = config('database.connections.db2.port', env('DB2_PORT', 446));
+        $port = config('database.connections.db2.port', env('DB2_PORT', 8082));
         $db   = config('database.connections.db2.database', env('DB2_DATABASE', 'SAMPLE'));
         $lib  = config('database.connections.db2.library', env('DB2_LIBRARY', ''));
         $user = config('database.connections.db2.username', env('DB2_USERNAME', ''));

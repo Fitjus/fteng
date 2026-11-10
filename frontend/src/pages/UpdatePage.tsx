@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import api from '../services/api';
 import type { AbonneInfo, CurrentUser } from '../types';
+import { COUNTRY_DIAL_CODES } from '../constants/countryCodes';
 
 interface UpdatePageProps {
   currentUser?: CurrentUser | null;
@@ -498,23 +499,13 @@ export const UpdatePage: React.FC<UpdatePageProps> = ({ currentUser }) => {
                     <select
                       value={countryCode}
                       onChange={(e) => setCountryCode(e.target.value)}
-                      className="px-2.5 py-2.5 bg-slate-100 hover:bg-slate-200/70 border border-r-0 border-slate-300 rounded-l-lg text-xs font-semibold text-slate-700 focus:ring-2 focus:ring-[#005ea2] focus:outline-none transition cursor-pointer shrink-0"
+                      className="px-2.5 py-2.5 bg-slate-100 hover:bg-slate-200/70 border border-r-0 border-slate-300 rounded-l-lg text-xs font-semibold text-slate-700 focus:ring-2 focus:ring-[#005ea2] focus:outline-none transition cursor-pointer shrink-0 max-w-[145px] sm:max-w-[180px] truncate"
                     >
-                      <option value="+229">🇧🇯 +229 (Bénin)</option>
-                      <option value="+228">🇹🇬 +228 (Togo)</option>
-                      <option value="+234">🇳🇬 +234 (Nigéria)</option>
-                      <option value="+225">🇨🇮 +225 (Côte d'Ivoire)</option>
-                      <option value="+227">🇳🇪 +227 (Niger)</option>
-                      <option value="+226">🇧🇫 +226 (Burkina)</option>
-                      <option value="+221">🇸🇳 +221 (Sénégal)</option>
-                      <option value="+223">🇲🇱 +223 (Mali)</option>
-                      <option value="+233">🇬🇭 +233 (Ghana)</option>
-                      <option value="+33">🇫🇷 +33 (France)</option>
-                      <option value="+1">🇺🇸 +1 (USA / Canada)</option>
-                      <option value="+32">🇧🇪 +32 (Belgique)</option>
-                      <option value="+237">🇨🇲 +237 (Cameroun)</option>
-                      <option value="+241">🇬🇦 +241 (Gabon)</option>
-                      <option value="+242">🇨🇬 +242 (Congo)</option>
+                      {COUNTRY_DIAL_CODES.map((item, index) => (
+                        <option key={`${item.code}-${index}`} value={item.code}>
+                          {item.label}
+                        </option>
+                      ))}
                     </select>
                     <input
                       type="tel"
