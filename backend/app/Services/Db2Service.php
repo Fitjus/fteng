@@ -7,11 +7,50 @@ use Illuminate\Support\Facades\Log;
 class Db2Service
 {
     /**
+     * Cache en mémoire pour éviter de tester plusieurs fois le socket dans la même requête
+     */
+    private ?bool $serverReachable = null;
+
+    /**
      * Vérifie si l'extension PHP ibm_db2 est chargée
      */
     public function isExtensionLoaded(): bool
     {
         return function_exists('db2_connect');
+    }
+
+    /**
+     * Teste la joignabilité TCP du serveur IBM Db2 avec un délai strict (5.0s par défaut).
+     * Si le serveur ne répond pas en 5 secondes, retourne false pour basculer immédiatement vers Supabase.
+     */
+    public function isServerReachable(float $timeout = 5.0): bool
+    {
+        if ($this->serverReachable !== null) {
+            return $this->serverReachable;
+        }
+
+        $host = config('database.connections.db2.host', env('DB2_HOST'));
+        $port = config('database.connections.db2.port', env('DB2_PORT', 446));
+
+        if (empty($host)) {
+            $this->serverReachable = false;
+            return false;
+        }
+
+        $errno = 0;
+        $errstr = '';
+
+        // Test de socket TCP avec timeout strict de 5 secondes
+        $socket = @fsockopen($host, (int) $port, $errno, $errstr, $timeout);
+        if (!$socket) {
+            Log::warning("Serveur IBM Db2 ({$host}:{$port}) injoignable après {$timeout}s : [{$errno}] {$errstr}. Bascule immédiate vers Supabase.");
+            $this->serverReachable = false;
+            return false;
+        }
+
+        fclose($socket);
+        $this->serverReachable = true;
+        return true;
     }
 
     /**
@@ -39,8 +78,13 @@ class Db2Service
             );
         }
 
-        // Chaîne TCP/IP directe uncataloged pour IBM i / Db2
-        $connString = "DATABASE={$db};HOSTNAME={$host};PORT={$port};PROTOCOL=TCPIP;UID={$user};PWD={$pass};";
+        // Vérification de la joignabilité avec délai strict de 5 secondes
+        if (!$this->isServerReachable(5.0)) {
+            throw new \Exception("Délai d'attente de 5 secondes dépassé : le serveur IBM Db2 ({$host}:{$port}) ne répond pas.");
+        }
+
+        // Chaîne TCP/IP directe uncataloged pour IBM i / Db2 avec CONNECTTIMEOUT=5
+        $connString = "DATABASE={$db};HOSTNAME={$host};PORT={$port};PROTOCOL=TCPIP;UID={$user};PWD={$pass};CONNECTTIMEOUT=5;";
 
         $options = [
             'autocommit'    => defined('DB2_AUTOCOMMIT_ON') ? DB2_AUTOCOMMIT_ON : 1,

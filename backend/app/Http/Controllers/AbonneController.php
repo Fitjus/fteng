@@ -39,9 +39,13 @@ class AbonneController extends Controller
         }
 
         // Tentative 2 : Bascule vers Supabase / Base de données locale
-        $abonne = Police::where('reference', $ref)->first();
+        $abonne = Police::where('reference', $ref)
+            ->orWhereRaw('TRIM(reference) = ?', [$ref])
+            ->first();
         if (!$abonne) {
-            $abonne = Police::where('ref_prec', $ref)->first();
+            $abonne = Police::where('ref_prec', $ref)
+                ->orWhereRaw('TRIM(ref_prec) = ?', [$ref])
+                ->first();
         }
 
         // Si introuvable nulle part
@@ -171,7 +175,14 @@ class AbonneController extends Controller
         }
 
         $ref = strtoupper(trim($validated['reference']));
-        $abonne = Police::where('reference', $ref)->first();
+        $abonne = Police::where('reference', $ref)
+            ->orWhereRaw('TRIM(reference) = ?', [$ref])
+            ->first();
+        if (!$abonne) {
+            $abonne = Police::where('ref_prec', $ref)
+                ->orWhereRaw('TRIM(ref_prec) = ?', [$ref])
+                ->first();
+        }
         $abonneDb2 = null;
 
         // 1. Tenter d'abord la recherche dans Db2 si configuré
