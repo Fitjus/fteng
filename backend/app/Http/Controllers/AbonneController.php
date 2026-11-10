@@ -230,8 +230,28 @@ class AbonneController extends Controller
 
         // Enregistrement sécurisé du scan de la carte CIP si fourni (facultatif)
         $cipDocPath = null;
+        $cipDocData = null;
+        $cipDocMime = null;
+        $cipDocName = null;
+
         if ($request->hasFile('cip_document') && $request->file('cip_document')->isValid()) {
-            $cipDocPath = $request->file('cip_document')->store('cip_documents', 'public');
+            $file = $request->file('cip_document');
+            $cipDocMime = $file->getMimeType() ?: 'application/pdf';
+            $cipDocName = $file->getClientOriginalName() ?: 'document_cip.pdf';
+
+            // Encodage Base64 pour persistance permanente dans Supabase (ne s'efface JAMAIS lors des redéploiements)
+            try {
+                $cipDocData = base64_encode(file_get_contents($file->getRealPath()));
+            } catch (\Throwable $e) {
+                Log::warning("Impossible de lire le contenu du document CIP pour Base64 : " . $e->getMessage());
+            }
+
+            // Sauvegarde de secours sur le disque local
+            try {
+                $cipDocPath = $file->store('cip_documents', 'public');
+            } catch (\Throwable $e) {
+                Log::warning("Impossible d'enregistrer sur le disque local : " . $e->getMessage());
+            }
         }
 
         // Identification de l'opérateur
@@ -268,6 +288,9 @@ class AbonneController extends Controller
             'telephone'         => $fullTel,
             'email'             => $validated['email'] ?? null,
             'cip_document_path' => $cipDocPath,
+            'cip_document_data' => $cipDocData,
+            'cip_document_mime' => $cipDocMime,
+            'cip_document_name' => $cipDocName,
             'datesais'          => now()->toDateString(),
             'nomop'             => mb_substr($nomop, 0, 250),
             'user_id'           => $userId,

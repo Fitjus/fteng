@@ -24,7 +24,8 @@ class AdminController extends Controller
      */
     protected function checkAdmin(Request $request)
     {
-        if (!$request->user() || !$request->user()->is_admin) {
+        $user = $request->user() ?? auth()->user();
+        if (!$user || !$user->is_admin) {
             abort(403, 'Accès réservé aux administrateurs SONEB.');
         }
     }
@@ -91,6 +92,9 @@ class AdminController extends Controller
                     'telephone'         => $staging->telephone,
                     'email'             => $staging->email,
                     'cip_document_path' => $staging->cip_document_path,
+                    'cip_document_data' => $staging->cip_document_data,
+                    'cip_document_mime' => $staging->cip_document_mime,
+                    'cip_document_name' => $staging->cip_document_name,
                     'datesais'          => $staging->datesais,
                     'nomop'             => $staging->nomop,
                 ]);
@@ -191,6 +195,7 @@ class AdminController extends Controller
             $tokenModel = \Laravel\Sanctum\PersonalAccessToken::findToken($request->query('token'));
             if ($tokenModel && $tokenModel->tokenable) {
                 auth()->setUser($tokenModel->tokenable);
+                $request->setUserResolver(fn () => $tokenModel->tokenable);
             }
         }
 
@@ -198,10 +203,24 @@ class AdminController extends Controller
 
         $staging = SaisieStaging::findOrFail($id);
 
-        if (!$staging->cip_document_path || !Storage::disk('public')->exists($staging->cip_document_path)) {
-            abort(404, 'Aucun document scanné associé à cette fiche.');
+        // 1. Priorité absolue : Fichier persisté en base de données Supabase (ne s'efface jamais lors des redéploiements)
+        if (!empty($staging->cip_document_data)) {
+            $decoded = base64_decode($staging->cip_document_data);
+            $mime = $staging->cip_document_mime ?: 'application/pdf';
+            $filename = $staging->cip_document_name ?: "document_cip_{$staging->reference}.pdf";
+
+            return response($decoded, 200, [
+                'Content-Type'        => $mime,
+                'Content-Disposition' => "inline; filename=\"{$filename}\"",
+                'Cache-Control'       => 'public, max-age=86400',
+            ]);
         }
 
-        return Storage::disk('public')->response($staging->cip_document_path);
+        // 2. Fallback disque local
+        if ($staging->cip_document_path && Storage::disk('public')->exists($staging->cip_document_path)) {
+            return Storage::disk('public')->response($staging->cip_document_path);
+        }
+
+        abort(404, 'Aucun document physique disponible pour cette fiche.');
     }
 }

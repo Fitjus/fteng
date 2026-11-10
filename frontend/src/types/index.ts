@@ -42,6 +42,7 @@ export interface StagingItem {
   telephone: string;
   email: string | null;
   cip_document_path?: string | null;
+  cip_document_data?: string | null;
   datesais: string;
   nomop: string;
   statut: 'en_attente' | 'valide' | 'rejete';

@@ -139,7 +139,7 @@ export const AdminStagingPage: React.FC<AdminStagingPageProps> = ({ token }) => 
                     <span className="text-slate-400 block text-[10px] uppercase">Téléphone</span>
                     <span className="font-mono font-semibold text-slate-800">{item.telephone}</span>
                   </div>
-                  {item.cip_document_path && (
+                  {(item.cip_document_path || item.cip_document_data) && (
                     <div className="col-span-2">
                       <span className="text-slate-400 block text-[10px] uppercase">Pièce justificative CIP</span>
                       <a
@@ -218,7 +218,7 @@ export const AdminStagingPage: React.FC<AdminStagingPageProps> = ({ token }) => 
                     <td className="p-3.5 font-mono">{item.cip}</td>
                     <td className="p-3.5 font-mono">{item.telephone}</td>
                     <td className="p-3.5">
-                      {item.cip_document_path ? (
+                      {(item.cip_document_path || item.cip_document_data) ? (
                         <a
                           href={`${API_BASE}/admin/staging/${item.id}/document?token=${token}`}
                           target="_blank"
