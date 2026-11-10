@@ -432,12 +432,12 @@ export const UpdatePage: React.FC<UpdatePageProps> = ({ currentUser }) => {
               </div>
 
               {/* Alerte si une précédente saisie a été rejetée */}
-              {abonne.submission_status === 'rejete' && abonne.motif_rejet && (
+              {abonne.submission_status === 'rejete' && (
                 <div className="p-3 bg-amber-50 text-amber-900 text-xs rounded-xl border border-amber-200 flex items-start space-x-2">
                   <Info className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
                   <div>
                     <span className="font-bold">Information : </span>
-                    <span>Une précédente saisie pour cette référence a été rejetée (Motif : <u>{abonne.motif_rejet}</u>). Vous pouvez soumettre vos coordonnées corrigées.</span>
+                    <span>Une précédente saisie pour cette référence a été rejetée. Vous pouvez soumettre vos coordonnées corrigées.</span>
                   </div>
                 </div>
               )}

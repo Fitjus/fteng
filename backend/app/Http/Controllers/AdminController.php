@@ -118,7 +118,7 @@ class AdminController extends Controller
         $this->checkAdmin($request);
 
         $request->validate([
-            'motif' => 'required|string|max:255',
+            'motif' => 'nullable|string|max:255',
         ]);
 
         $staging = SaisieStaging::where('id', $id)
@@ -128,12 +128,12 @@ class AdminController extends Controller
         $staging->update([
             'statut'       => 'rejete',
             'admin_id'     => $request->user()->id,
-            'motif_rejet'  => $request->motif,
+            'motif_rejet'  => $request->input('motif', null),
             'validated_at' => now(),
         ]);
 
         return response()->json([
-            'message' => "La saisie a été rejetée.",
+            'message' => "La saisie pour la référence {$staging->reference} a été rejetée.",
             'staging' => $staging,
         ]);
     }

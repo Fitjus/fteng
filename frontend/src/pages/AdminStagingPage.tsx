@@ -42,10 +42,9 @@ export const AdminStagingPage: React.FC<AdminStagingPageProps> = ({ token }) => 
   };
 
   const handleRejeter = async (id: number) => {
-    const motif = prompt('Veuillez indiquer le motif du rejet :');
-    if (!motif) return;
+    if (!confirm('Confirmer le rejet de cette saisie ?')) return;
     try {
-      const res = await api.post(`/admin/staging/${id}/rejeter`, { motif });
+      const res = await api.post(`/admin/staging/${id}/rejeter`);
       setActionMsg(res.data.message);
       fetchStaging();
     } catch (err: any) {
