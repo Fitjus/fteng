@@ -69,7 +69,7 @@ class AdminController extends Controller
 
             // 1. Mettre à jour la table officielle SONEB (Local / Supabase)
             // 1. Tenter la mise à jour de la table officielle POLPF sur IBM Db2 si configuré et joignable
-            if (env('DB2_HOST') && $this->db2->isExtensionLoaded()) {
+            if ($this->db2->isConfigured()) {
                 try {
                     $this->db2->updateAbonneOfficial(
                         reference: $staging->reference,

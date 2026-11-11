@@ -27,7 +27,7 @@ class AbonneController extends Controller
         $abonneDb2 = null;
 
         // Tentative 1 : Interrogation directe d'IBM Db2 (Fichier POLPF) si configuré
-        if (env('DB2_HOST') && $this->db2->isExtensionLoaded()) {
+        if ($this->db2->isConfigured()) {
             try {
                 $abonneDb2 = $this->db2->findAbonne($ref);
                 if ($abonneDb2) {
@@ -186,7 +186,7 @@ class AbonneController extends Controller
         $abonneDb2 = null;
 
         // 1. Tenter d'abord la recherche dans Db2 si configuré
-        if (env('DB2_HOST') && $this->db2->isExtensionLoaded()) {
+        if ($this->db2->isConfigured()) {
             try {
                 $abonneDb2 = $this->db2->findAbonne($ref);
             } catch (\Throwable $e) {
@@ -202,7 +202,7 @@ class AbonneController extends Controller
 
         // 2. Empêcher toute double saisie (Vérification Db2 + Supabase)
         $existingDb2Staging = null;
-        if (env('DB2_HOST') && $this->db2->isExtensionLoaded()) {
+        if ($this->db2->isConfigured()) {
             try {
                 $existingDb2Staging = $this->db2->findExistingSaisie($ref);
             } catch (\Throwable $e) {
@@ -265,7 +265,7 @@ class AbonneController extends Controller
         $userId = $user ? $user->id : null;
 
         // 3. Tenter l'insertion dans le staging POLPFZ d'IBM Db2 si joignable
-        if (env('DB2_HOST') && $this->db2->isExtensionLoaded()) {
+        if ($this->db2->isConfigured()) {
             try {
                 $this->db2->insertCoordonnees(
                     reference: $ref,
