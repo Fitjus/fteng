@@ -9,38 +9,74 @@ class Db2Service
     /**
      * Vérifie si l'extension PHP ibm_db2 est chargée
      */
-    public function isExtensionLoaded(): bool
+    public function hasIbmDb2(): bool
     {
         return function_exists('db2_connect');
     }
 
     /**
-     * Vérifie si l'hôte Db2 est configuré et l'extension chargée
+     * Vérifie si l'extension PHP pdo_odbc est chargée (utile sous Windows XAMPP)
      */
-    public function isConfigured(): bool
+    public function hasPdoOdbc(): bool
     {
-        return !empty(config('database.connections.db2.host', env('DB2_HOST')))
-            && $this->isExtensionLoaded();
+        return extension_loaded('pdo_odbc')
+            || (class_exists(\PDO::class) && in_array('odbc', \PDO::getAvailableDrivers(), true));
     }
 
     /**
-     * Établit et renvoie la ressource de connexion IBM i (Db2)
+     * Vérifie si au moins un pilote Db2/ODBC compatible est disponible
+     */
+    public function isExtensionLoaded(): bool
+    {
+        return $this->hasIbmDb2() || $this->hasPdoOdbc();
+    }
+
+    /**
+     * Vérifie si l'hôte Db2 est configuré et qu'un pilote PHP est chargé
+     */
+    public function isConfigured(): bool
+    {
+        return !empty($this->db2Config('host')) && $this->isExtensionLoaded();
+    }
+
+    private function db2Config(string $key, mixed $default = null): mixed
+    {
+        $envMap = [
+            'host'        => 'DB2_HOST',
+            'port'        => 'DB2_PORT',
+            'database'    => 'DB2_DATABASE',
+            'library'     => 'DB2_LIBRARY',
+            'username'    => 'DB2_USERNAME',
+            'password'    => 'DB2_PASSWORD',
+            'dsn'         => 'DB2_DSN',
+            'odbc_driver' => 'DB2_ODBC_DRIVER',
+        ];
+
+        $envVal = isset($envMap[$key]) ? env($envMap[$key], $default) : $default;
+        $val = config("database.connections.db2.{$key}", $envVal);
+
+        return ($val === null || $val === '') ? $envVal : $val;
+    }
+
+    /**
+     * Établit et renvoie la connexion IBM i / Db2 (ressource ibm_db2 ou instance PDO ODBC)
      */
     public function getConnection()
     {
         if (!$this->isExtensionLoaded()) {
             throw new \RuntimeException(
-                "L'extension PHP 'ibm_db2' n'est pas installée ou activée sur ce serveur. " .
-                "Assurez-vous que le pilote IBM clidriver et l'extension pecl ibm_db2 sont installés."
+                "Aucune extension Db2 PHP n'est activée ('ibm_db2' ou 'pdo_odbc'). " .
+                "Sous Windows XAMPP, activez 'extension=pdo_odbc' dans php.ini avec un pilote ODBC IBM, " .
+                "ou utilisez Docker avec l'extension 'ibm_db2'."
             );
         }
 
-        $host = config('database.connections.db2.host', env('DB2_HOST'));
-        $port = config('database.connections.db2.port', env('DB2_PORT', 8082));
-        $db   = config('database.connections.db2.database', env('DB2_DATABASE', 'SAMPLE'));
-        $lib  = config('database.connections.db2.library', env('DB2_LIBRARY', ''));
-        $user = config('database.connections.db2.username', env('DB2_USERNAME', ''));
-        $pass = config('database.connections.db2.password', env('DB2_PASSWORD', ''));
+        $host = $this->db2Config('host');
+        $port = $this->db2Config('port', 8082);
+        $db   = $this->db2Config('database', 'SAMPLE');
+        $lib  = $this->db2Config('library', '');
+        $user = $this->db2Config('username', '');
+        $pass = $this->db2Config('password', '');
 
         if (empty($host) || empty($user) || empty($pass)) {
             throw new \InvalidArgumentException(
@@ -48,31 +84,136 @@ class Db2Service
             );
         }
 
-        // Chaîne TCP/IP directe uncataloged pour IBM i / Db2
-        $connString = "DATABASE={$db};HOSTNAME={$host};PORT={$port};PROTOCOL=TCPIP;UID={$user};PWD={$pass};";
+        if ($this->hasIbmDb2()) {
+            $connString = "DATABASE={$db};HOSTNAME={$host};PORT={$port};PROTOCOL=TCPIP;UID={$user};PWD={$pass};";
+            $options = [
+                'autocommit'    => defined('DB2_AUTOCOMMIT_ON') ? DB2_AUTOCOMMIT_ON : 1,
+                'DB2_ATTR_CASE' => defined('DB2_CASE_LOWER') ? DB2_CASE_LOWER : 0,
+                'i5_naming'     => defined('DB2_I5_NAMING_OFF') ? DB2_I5_NAMING_OFF : 0,
+                'i5_commit'     => defined('DB2_I5_TXN_NO_COMMIT') ? DB2_I5_TXN_NO_COMMIT : 1,
+            ];
+            if (!empty($lib)) {
+                $options['i5_lib'] = $lib;
+            }
 
-        $options = [
-            'autocommit'    => defined('DB2_AUTOCOMMIT_ON') ? DB2_AUTOCOMMIT_ON : 1,
-            'DB2_ATTR_CASE' => defined('DB2_CASE_LOWER') ? DB2_CASE_LOWER : 0, // Clés renvoyées en minuscules
-            'i5_naming'     => defined('DB2_I5_NAMING_OFF') ? DB2_I5_NAMING_OFF : 0, // Syntaxe SQL (BIB.TABLE)
-            'i5_commit'     => defined('DB2_I5_TXN_NO_COMMIT') ? DB2_I5_TXN_NO_COMMIT : 1, // Évite erreur si non journalisé
-        ];
+            $conn = @db2_connect($connString, '', '', $options);
+            if (!$conn) {
+                $code = function_exists('db2_conn_error') ? db2_conn_error() : 'UNKNOWN';
+                $msg  = function_exists('db2_conn_errormsg') ? db2_conn_errormsg() : 'Erreur inconnue';
+                Log::error("Échec connexion IBM Db2 [{$code}] : {$msg}");
+                throw new \Exception("Échec de connexion IBM Db2 [{$code}] : {$msg}");
+            }
 
-        if (!empty($lib)) {
-            $options['i5_lib'] = $lib;
+            return $conn;
         }
 
-        // Connexion TCP/IP non cataloguée (arguments UID/PWD vides dans l'appel fonction car inclus dans $connString)
-        $conn = @db2_connect($connString, '', '', $options);
+        // Fallback natif Windows XAMPP via PDO ODBC
+        $dsnName = $this->db2Config('dsn', '');
+        $driver  = $this->db2Config('odbc_driver', 'IBM DB2 ODBC DRIVER');
 
-        if (!$conn) {
-            $code = function_exists('db2_conn_error') ? db2_conn_error() : 'UNKNOWN';
-            $msg  = function_exists('db2_conn_errormsg') ? db2_conn_errormsg() : 'Erreur inconnue';
-            Log::error("Échec connexion IBM Db2 [{$code}] : {$msg}");
-            throw new \Exception("Échec de connexion IBM Db2 [{$code}] : {$msg}");
+        if (!empty($dsnName)) {
+            $pdoDsn = "odbc:{$dsnName}";
+        } elseif (stripos((string) $driver, 'IBM i Access') !== false) {
+            $libAttr = !empty($lib) ? "DBQ={$lib};" : '';
+            $pdoDsn = "odbc:DRIVER={{$driver}};SYSTEM={$host};{$libAttr}NAM=0;CMT=0;";
+        } else {
+            $pdoDsn = "odbc:DRIVER={{$driver}};DATABASE={$db};HOSTNAME={$host};PORT={$port};PROTOCOL=TCPIP;";
         }
 
-        return $conn;
+        try {
+            $pdo = new \PDO($pdoDsn, (string) $user, (string) $pass, [
+                \PDO::ATTR_ERRMODE            => \PDO::ERRMODE_EXCEPTION,
+                \PDO::ATTR_CASE               => \PDO::CASE_LOWER,
+                \PDO::ATTR_DEFAULT_FETCH_MODE => \PDO::FETCH_ASSOC,
+            ]);
+            return $pdo;
+        } catch (\PDOException $e) {
+            Log::error("Échec connexion IBM Db2 (PDO ODBC) : " . $e->getMessage());
+            throw new \Exception("Échec de connexion IBM Db2 (ODBC) : " . $e->getMessage(), 0, $e);
+        }
+    }
+
+    /**
+     * Exécute un SELECT et retourne la première ligne associative, ou null
+     */
+    private function fetchRow($conn, string $sql, array $params = [], bool $throwOnPrepareError = true): ?array
+    {
+        if ($conn instanceof \PDO) {
+            try {
+                $stmt = $conn->prepare($sql);
+                $stmt->execute($params);
+                $row = $stmt->fetch(\PDO::FETCH_ASSOC);
+                return $row ?: null;
+            } catch (\PDOException $e) {
+                if ($throwOnPrepareError) {
+                    throw new \Exception("Erreur SQL (ODBC) : " . $e->getMessage(), 0, $e);
+                }
+                return null;
+            }
+        }
+
+        $stmt = @db2_prepare($conn, $sql);
+        if (!$stmt) {
+            if ($throwOnPrepareError) {
+                throw new \Exception("Erreur de préparation SQL : " . db2_stmt_errormsg());
+            }
+            return null;
+        }
+
+        @db2_execute($stmt, $params);
+        $row = @db2_fetch_assoc($stmt);
+        return $row ?: null;
+    }
+
+    /**
+     * Exécute une requête INSERT/UPDATE avec paramètres
+     */
+    private function executeNonQuery($conn, string $sql, array $params = [], bool $throwOnError = true, string $context = 'SQL'): bool
+    {
+        if ($conn instanceof \PDO) {
+            try {
+                $stmt = $conn->prepare($sql);
+                return $stmt->execute($params);
+            } catch (\PDOException $e) {
+                if ($throwOnError) {
+                    throw new \Exception("Erreur {$context} (ODBC) : " . $e->getMessage(), 0, $e);
+                }
+                Log::warning("Erreur {$context} (ODBC) : " . $e->getMessage());
+                return false;
+            }
+        }
+
+        $stmt = @db2_prepare($conn, $sql);
+        if (!$stmt) {
+            $err = db2_stmt_errormsg();
+            if ($throwOnError) {
+                throw new \Exception("Erreur de préparation SQL ({$context}) : {$err}");
+            }
+            Log::warning("Impossible de préparer {$context} : {$err}");
+            return false;
+        }
+
+        $result = @db2_execute($stmt, $params);
+        if (!$result) {
+            $err = db2_stmt_errormsg();
+            if ($throwOnError) {
+                throw new \Exception("Erreur lors de l'exécution ({$context}) : {$err}");
+            }
+            Log::warning("Échec exécution ({$context}) : {$err}");
+            return false;
+        }
+
+        return true;
+    }
+
+    private function closeConnection($conn): void
+    {
+        if ($conn instanceof \PDO) {
+            return;
+        }
+        if ($conn) {
+            @db2_close($conn);
+        }
     }
 
     /**
@@ -82,39 +223,31 @@ class Db2Service
     {
         try {
             $conn = $this->getConnection();
+            $driverUsed = $conn instanceof \PDO ? 'pdo_odbc' : 'ibm_db2';
 
-            // Test simple d'exécution de date système
-            $sql = "SELECT CURRENT DATE AS date_serveur FROM SYSIBM.SYSDUMMY1";
-            $stmt = @db2_exec($conn, $sql);
+            $row = $this->fetchRow($conn, "SELECT CURRENT DATE AS date_serveur FROM SYSIBM.SYSDUMMY1", [], false);
+            $dateServeur = $row['date_serveur'] ?? $row['DATE_SERVEUR'] ?? date('Y-m-d');
 
-            $dateServeur = null;
-            if ($stmt) {
-                $row = db2_fetch_assoc($stmt);
-                $dateServeur = $row['date_serveur'] ?? $row['DATE_SERVEUR'] ?? date('Y-m-d');
-            }
-
-            // Récupération informations job IBM i si disponible
             $jobInfo = null;
             try {
                 $sqlJob = "SELECT JOB_NAME FROM TABLE(QSYS2.ACTIVE_JOB_INFO()) WHERE AUTHORIZATION_NAME = CURRENT USER";
-                $stmtJob = @db2_exec($conn, $sqlJob);
-                if ($stmtJob && ($rowJob = db2_fetch_assoc($stmtJob))) {
-                    $jobInfo = $rowJob['job_name'] ?? $rowJob['JOB_NAME'] ?? null;
-                }
+                $rowJob = $this->fetchRow($conn, $sqlJob, [], false);
+                $jobInfo = $rowJob['job_name'] ?? $rowJob['JOB_NAME'] ?? null;
             } catch (\Throwable $e) {
                 // Optionnel
             }
 
-            db2_close($conn);
+            $this->closeConnection($conn);
 
             return [
                 'success'      => true,
-                'message'      => 'Connexion IBM Db2 réussie !',
+                'message'      => "Connexion IBM Db2 réussie ({$driverUsed}) !",
+                'driver'       => $driverUsed,
                 'date_serveur' => $dateServeur,
                 'job_ibmi'     => $jobInfo,
-                'database'     => config('database.connections.db2.database', env('DB2_DATABASE')),
-                'library'      => config('database.connections.db2.library', env('DB2_LIBRARY')),
-                'host'         => config('database.connections.db2.host', env('DB2_HOST')),
+                'database'     => $this->db2Config('database'),
+                'library'      => $this->db2Config('library'),
+                'host'         => $this->db2Config('host'),
             ];
         } catch (\Throwable $e) {
             return [
@@ -130,41 +263,25 @@ class Db2Service
     public function findAbonne(string $reference): ?array
     {
         $conn = $this->getConnection();
-        $lib  = config('database.connections.db2.library', env('DB2_LIBRARY', ''));
+        $lib  = $this->db2Config('library', '');
         $table = !empty($lib) ? "{$lib}.POLPF" : "POLPF";
 
         $cleanRef = trim($reference);
 
-        // Recherche par la référence principale (CODPPO)
-        $sql = "SELECT * FROM {$table} WHERE TRIM(CODPPO) = ?";
-        $stmt = db2_prepare($conn, $sql);
+        try {
+            $row = $this->fetchRow($conn, "SELECT * FROM {$table} WHERE TRIM(CODPPO) = ?", [$cleanRef], true);
 
-        if (!$stmt) {
-            $err = db2_stmt_errormsg();
-            db2_close($conn);
-            throw new \Exception("Erreur de préparation SQL (POLPF) : {$err}");
-        }
-
-        db2_execute($stmt, [$cleanRef]);
-        $row = db2_fetch_assoc($stmt);
-
-        // Si non trouvé et si la table supporte une référence précédente (REFPREC)
-        if (!$row) {
-            $sqlFallback = "SELECT * FROM {$table} WHERE TRIM(REFPREC) = ?";
-            $stmtFallback = @db2_prepare($conn, $sqlFallback);
-            if ($stmtFallback) {
-                @db2_execute($stmtFallback, [$cleanRef]);
-                $row = @db2_fetch_assoc($stmtFallback);
+            if (!$row) {
+                $row = $this->fetchRow($conn, "SELECT * FROM {$table} WHERE TRIM(REFPREC) = ?", [$cleanRef], false);
             }
+        } finally {
+            $this->closeConnection($conn);
         }
-
-        db2_close($conn);
 
         if (!$row) {
             return null;
         }
 
-        // Mappage standardisé vers les champs attendus par l'application Laravel
         return $this->formatAbonneRow($row, $cleanRef);
     }
 
@@ -174,21 +291,16 @@ class Db2Service
     public function findExistingSaisie(string $reference): ?array
     {
         $conn = $this->getConnection();
-        $lib  = config('database.connections.db2.library', env('DB2_LIBRARY', ''));
+        $lib  = $this->db2Config('library', '');
         $table = !empty($lib) ? "{$lib}.POLPFZ" : "POLPFZ";
 
         $cleanRef = trim($reference);
-        $sql = "SELECT * FROM {$table} WHERE TRIM(CODPPO) = ? FETCH FIRST 1 ROWS ONLY";
-        $stmt = @db2_prepare($conn, $sql);
 
-        if (!$stmt) {
-            db2_close($conn);
-            return null;
+        try {
+            $row = $this->fetchRow($conn, "SELECT * FROM {$table} WHERE TRIM(CODPPO) = ? FETCH FIRST 1 ROWS ONLY", [$cleanRef], false);
+        } finally {
+            $this->closeConnection($conn);
         }
-
-        @db2_execute($stmt, [$cleanRef]);
-        $row = @db2_fetch_assoc($stmt);
-        db2_close($conn);
 
         if (!$row) {
             return null;
@@ -215,37 +327,23 @@ class Db2Service
         ?string $cipDocPath = null
     ): bool {
         $conn = $this->getConnection();
-        $lib  = config('database.connections.db2.library', env('DB2_LIBRARY', ''));
+        $lib  = $this->db2Config('library', '');
         $table = !empty($lib) ? "{$lib}.POLPFZ" : "POLPFZ";
 
-        $cleanRef = trim($reference);
-        $cleanCip = trim($cip);
-        $cleanTel = trim($telephone);
-        $cleanEmail = !empty($email) ? trim($email) : '';
+        $sql = "INSERT INTO {$table} (CODPPO, CIP, TELEPHONE, EMAIL, DATESAIS, NOMOP) VALUES (?, ?, ?, ?, CURRENT DATE, ?)";
+        $params = [
+            trim($reference),
+            trim($cip),
+            trim($telephone),
+            !empty($email) ? trim($email) : '',
+            $nomop,
+        ];
 
-        // Insertion dans POLPFZ
-        $sql = "INSERT INTO {$table} (CODPPO, CIP, TELEPHONE, EMAIL, DATESAIS, NOMOP) 
-                VALUES (?, ?, ?, ?, CURRENT DATE, ?)";
-
-        $stmt = db2_prepare($conn, $sql);
-
-        if (!$stmt) {
-            $err = db2_stmt_errormsg();
-            db2_close($conn);
-            throw new \Exception("Erreur de préparation SQL pour insertion dans POLPFZ : {$err}");
+        try {
+            return $this->executeNonQuery($conn, $sql, $params, true, 'POLPFZ');
+        } finally {
+            $this->closeConnection($conn);
         }
-
-        $params = [$cleanRef, $cleanCip, $cleanTel, $cleanEmail, $nomop];
-        $result = db2_execute($stmt, $params);
-
-        if (!$result) {
-            $err = db2_stmt_errormsg();
-            db2_close($conn);
-            throw new \Exception("Erreur lors de l'enregistrement dans POLPFZ : {$err}");
-        }
-
-        db2_close($conn);
-        return true;
     }
 
     /**
@@ -259,28 +357,23 @@ class Db2Service
         ?string $nomop = 'ADMIN_SONEB'
     ): bool {
         $conn = $this->getConnection();
-        $lib  = config('database.connections.db2.library', env('DB2_LIBRARY', ''));
+        $lib  = $this->db2Config('library', '');
         $table = !empty($lib) ? "{$lib}.POLPF" : "POLPF";
 
-        $cleanRef = trim($reference);
-        $cleanCip = trim($cip);
-        $cleanTel = trim($telephone);
-        $cleanEmail = !empty($email) ? trim($email) : '';
-
         $sql = "UPDATE {$table} SET CIP = ?, TELEPHONE = ?, EMAIL = ?, DATESAIS = CURRENT DATE, NOMOP = ? WHERE TRIM(CODPPO) = ?";
-        $stmt = @db2_prepare($conn, $sql);
+        $params = [
+            trim($cip),
+            trim($telephone),
+            !empty($email) ? trim($email) : '',
+            $nomop,
+            trim($reference),
+        ];
 
-        if (!$stmt) {
-            $err = db2_stmt_errormsg();
-            db2_close($conn);
-            Log::warning("Impossible de préparer l'UPDATE sur POLPF : {$err}");
-            return false;
+        try {
+            return $this->executeNonQuery($conn, $sql, $params, false, 'UPDATE POLPF');
+        } finally {
+            $this->closeConnection($conn);
         }
-
-        $res = @db2_execute($stmt, [$cleanCip, $cleanTel, $cleanEmail, $nomop, $cleanRef]);
-        db2_close($conn);
-
-        return (bool)$res;
     }
 
     /**
@@ -288,14 +381,13 @@ class Db2Service
      */
     private function formatAbonneRow(array $row, string $reference): array
     {
-        // Recherche des champs avec tolérance de casse (minuscule / majuscule)
         $get = function (...$keys) use ($row) {
             foreach ($keys as $k) {
-                if (isset($row[$k])) return trim((string)$row[$k]);
+                if (isset($row[$k])) return trim((string) $row[$k]);
                 $lower = strtolower($k);
-                if (isset($row[$lower])) return trim((string)$row[$lower]);
+                if (isset($row[$lower])) return trim((string) $row[$lower]);
                 $upper = strtoupper($k);
-                if (isset($row[$upper])) return trim((string)$row[$upper]);
+                if (isset($row[$upper])) return trim((string) $row[$upper]);
             }
             return null;
         };
@@ -314,9 +406,9 @@ class Db2Service
             'ref_prec'          => $get('refprec', 'ref_prec'),
             'nom_abonne'        => $get('nom_abonne', 'nom', 'rsoc', 'nomrsoc') ?: 'Client SONEB',
             'ville'             => $get('ville', 'loc') ?: '—',
-            'departement'       => (int)($get('departement', 'dept', 'd') ?: 0),
-            'agence'            => (int)($get('agence', 'a') ?: 0),
-            'centre'            => (int)($get('centre', 'c') ?: 0),
+            'departement'       => (int) ($get('departement', 'dept', 'd') ?: 0),
+            'agence'            => (int) ($get('agence', 'a') ?: 0),
+            'centre'            => (int) ($get('centre', 'c') ?: 0),
             'police'            => $get('police', 'nopan', 'panneau') ?: '—',
             'etat_abo'          => $get('etat_abo', 'etabt') ?: '—',
             'etat_comp'         => $get('etat_comp', 'etcpt') ?: '—',
