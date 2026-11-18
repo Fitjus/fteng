@@ -38,14 +38,13 @@ RUN mkdir -p /opt \
 # Installation de Composer
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
-# Répertoire de travail
 WORKDIR /var/www/html
 
-# Configuration Apache
-COPY docker/apache.conf /etc/apache2/sites-available/000-default.conf
+# Configuration Apache (fichier à la racine du dépôt)
+COPY apache.conf /etc/apache2/sites-available/000-default.conf
 
-# Copie du projet Laravel
-COPY . /var/www/html
+# Copie des fichiers backend
+COPY backend/ /var/www/html
 
 # Installation des dépendances PHP
 RUN composer install \
@@ -59,9 +58,12 @@ RUN chown -R www-data:www-data \
         /var/www/html/bootstrap/cache \
     && chmod -R 775 \
         /var/www/html/storage \
-        /var/www/html/bootstrap/cache \
-    && chmod +x /var/www/html/docker/entrypoint.sh
+        /var/www/html/bootstrap/cache
+
+# Script de démarrage (fichier à la racine du dépôt)
+COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
 
 EXPOSE 80
 
-ENTRYPOINT ["/var/www/html/docker/entrypoint.sh"]
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
