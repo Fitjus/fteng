@@ -50,6 +50,7 @@ class Db2Service
             'password'    => 'DB2_PASSWORD',
             'dsn'         => 'DB2_DSN',
             'odbc_driver' => 'DB2_ODBC_DRIVER',
+             
         ];
 
         $envVal = isset($envMap[$key]) ? env($envMap[$key], $default) : $default;
@@ -113,7 +114,8 @@ class Db2Service
 
         if (!empty($dsnName)) {
             $pdoDsn = "odbc:{$dsnName}";
-        } elseif (stripos((string) $driver, 'IBM i Access') !== false) {
+            
+        } elseif (preg_match('/(IBM i Access|iSeries Access|Client Access)/i', (string) $driver)) {
             $libAttr = !empty($lib) ? "DBQ={$lib};" : '';
             $pdoDsn = "odbc:DRIVER={{$driver}};SYSTEM={$host};{$libAttr}NAM=0;CMT=0;";
         } else {
@@ -272,7 +274,7 @@ class Db2Service
             $row = $this->fetchRow($conn, "SELECT * FROM {$table} WHERE TRIM(CODPPO) = ?", [$cleanRef], true);
 
             if (!$row) {
-                $row = $this->fetchRow($conn, "SELECT * FROM {$table} WHERE TRIM(REFPREC) = ?", [$cleanRef], false);
+                $row = $this->fetchRow($conn, "SELECT * FROM {$table} WHERE TRIM(AREFPO) = ?", [$cleanRef], false);
             }
         } finally {
             $this->closeConnection($conn);
@@ -379,44 +381,59 @@ class Db2Service
     /**
      * Formate la ligne brute Db2 vers le format JSON unifié du frontend SONEB
      */
-    private function formatAbonneRow(array $row, string $reference): array
-    {
-        $get = function (...$keys) use ($row) {
-            foreach ($keys as $k) {
-                if (isset($row[$k])) return trim((string) $row[$k]);
-                $lower = strtolower($k);
-                if (isset($row[$lower])) return trim((string) $row[$lower]);
-                $upper = strtoupper($k);
-                if (isset($row[$upper])) return trim((string) $row[$upper]);
+   private function formatAbonneRow(array $row, string $reference): array
+{
+    // Retourne la première valeur non vide parmi les colonnes demandées,
+    // et convertit en UTF-8 si le texte vient de l'IBM i (Windows-1252).
+    $get = function (...$keys) use ($row) {
+        foreach ($keys as $k) {
+            foreach ([$k, strtolower($k), strtoupper($k)] as $kk) {
+                if (isset($row[$kk]) && trim((string) $row[$kk]) !== '') {
+                    $v = trim((string) $row[$kk]);
+                    if (!mb_check_encoding($v, 'UTF-8')) {
+                        $v = mb_convert_encoding($v, 'UTF-8', 'Windows-1252');
+                    }
+                    return $v;
+                }
             }
-            return null;
-        };
+        }
+        return null;
+    };
 
-        $existingSaisie = $this->findExistingSaisie($reference);
+    // Correspondance code => nom (à compléter avec l'étape 2)
+    $departements = [
+        6 => 'ATACORA', // à confirmer
+    ];
+    $deptCode    = $get('deptpo');
+    $departement = $departements[(int) $deptCode] ?? $deptCode ?? '—';
 
-        $cip       = $existingSaisie['cip'] ?? $get('cip');
-        $telephone = $existingSaisie['telephone'] ?? $get('telephone', 'tel');
-        $email     = $existingSaisie['email'] ?? $get('email', 'mail');
-        $datesais  = $existingSaisie['datesais'] ?? $get('datesais');
+    $existingSaisie = $this->findExistingSaisie($reference);
 
-        $alreadySubmitted = !empty($cip) || !empty($telephone) || !empty($existingSaisie);
+    $cip       = $existingSaisie['cip'] ?? $get('cip');
+    $telephone = $existingSaisie['telephone'] ?? $get('telephone', 'tel');
+    $email     = $existingSaisie['email'] ?? $get('email', 'mail');
+    $datesais  = $existingSaisie['datesais'] ?? $get('datesais');
 
-        return [
-            'reference'         => $get('codppo', 'reference') ?: $reference,
-            'ref_prec'          => $get('refprec', 'ref_prec'),
-            'nom_abonne'        => $get('nom_abonne', 'nom', 'rsoc', 'nomrsoc') ?: 'Client SONEB',
-            'ville'             => $get('ville', 'loc') ?: '—',
-            'departement'       => (int) ($get('departement', 'dept', 'd') ?: 0),
-            'agence'            => (int) ($get('agence', 'a') ?: 0),
-            'centre'            => (int) ($get('centre', 'c') ?: 0),
-            'police'            => $get('police', 'nopan', 'panneau') ?: '—',
-            'etat_abo'          => $get('etat_abo', 'etabt') ?: '—',
-            'etat_comp'         => $get('etat_comp', 'etcpt') ?: '—',
-            'already_submitted' => $alreadySubmitted,
-            'cip'               => $cip,
-            'telephone'         => $telephone,
-            'email'             => $email,
-            'datesais'          => $datesais,
-        ];
-    }
+    $alreadySubmitted = !empty($cip) || !empty($telephone) || !empty($existingSaisie);
+
+    return [
+        'reference'         => $get('codppo') ?: $reference,
+        'ref_prec'          => $get('arefpo'),
+        'nom_abonne'        => $get('nomppo', 'nomcpo', 'nomkpo') ?: 'Client SONEB',
+        'ville'             => $get('vilppo', 'vilcpo', 'vilkpo') ?: '—',
+        'departement'       => $departement,
+        'agence'            => $get('anacpo') ?: '—',
+        'centre'            => (int) ($get('centpo') ?: 0),
+        'police'            => $get('pannpo') ?: '—',
+        'etat_abo'          => $get('eabopo') ?: '—',
+        'etat_comp'         => $get('ecptpo') ?: '—',
+        'already_submitted' => $alreadySubmitted,
+        'cip'               => $cip,
+        'telephone'         => $telephone,
+        'email'             => $email,
+        'datesais'          => $datesais,
+    ];
 }
+
+}
+

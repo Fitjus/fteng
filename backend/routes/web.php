@@ -31,7 +31,7 @@ Route::get('/init-data', function () {
     if (!file_exists($excelPath)) {
         return response()->json([
             'success' => false,
-            'message' => 'Fichier polalada.xlsx introuvable sur le serveur.',
+            'message' => 'Fichier introuvable sur le serveur.',
         ], 404);
     }
 
