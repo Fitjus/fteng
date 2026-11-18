@@ -12,7 +12,7 @@ return [
 
     'allowed_methods' => ['*'],
 
-    'allowed_origins' => ['http://localhost:5173', 'https://fteng-z4it.vercel.app/login'],
+    'allowed_origins' => ['http://localhost:5173', 'https://fteng-z4it.vercel.app'],
 
     'allowed_origins_patterns' => [],
 
