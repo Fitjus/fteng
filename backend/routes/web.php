@@ -1,7 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
-use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Artisan;                                 
 use App\Models\Police;
 use App\Models\User;
 use Illuminate\Support\Facades\Hash;
